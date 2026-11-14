@@ -15,13 +15,22 @@ export type Version = {
 
 export type Proposal = { versions: readonly Version[] };
 
+/**
+ * The version and exact PDF the client's page was showing (D-16). A view, sign or decline acts on that version only: it is
+ * rejected if another version is current, if the version has no recorded hash, or if the hash differs from the one
+ * recorded at send. Never "whatever is current now".
+ */
+export type VersionRef = { version: number; pdfSha256: string };
+
 export type ProposalEvent =
   | { type: 'send'; pdfSha256: string }
-  | { type: 'view' }
-  | { type: 'sign' }
-  | { type: 'decline' }
+  | ({ type: 'view' } & VersionRef)
+  | ({ type: 'sign' } & VersionRef)
+  | ({ type: 'decline' } & VersionRef)
   | { type: 'expire' }
   | { type: 'edit' };
+
+export type BoundEventType = 'view' | 'sign' | 'decline';
 
 export type AuditAction =
   | 'version.created'
@@ -44,6 +53,46 @@ export class TransitionError extends Error {
     readonly event: ProposalEvent['type'],
   ) {
     super(`cannot ${event} a ${from} version`);
+  }
+}
+
+/** The event names a version that is not the current one, e.g. a sign from a stale v1 page after v2 was sent. */
+export class VersionMismatchError extends TransitionError {
+  override name = 'VersionMismatchError';
+  constructor(
+    from: VersionStatus,
+    event: BoundEventType,
+    readonly requested: number,
+    readonly currentVersion: number,
+  ) {
+    super(from, event);
+    this.message = `cannot ${event} version ${requested}: version ${currentVersion} is current`;
+  }
+}
+
+/** The named version has no valid recorded PDF hash, so there is nothing the client can be shown to have agreed to. */
+export class MissingHashError extends TransitionError {
+  override name = 'MissingHashError';
+  constructor(
+    from: VersionStatus,
+    event: BoundEventType,
+    readonly versionNumber: number,
+  ) {
+    super(from, event);
+    this.message = `cannot ${event} version ${versionNumber}: it has no recorded PDF hash`;
+  }
+}
+
+/** The PDF hash on the event is not the one recorded when the version was sent. */
+export class HashMismatchError extends TransitionError {
+  override name = 'HashMismatchError';
+  constructor(
+    from: VersionStatus,
+    event: BoundEventType,
+    readonly versionNumber: number,
+  ) {
+    super(from, event);
+    this.message = `cannot ${event} version ${versionNumber}: the PDF hash does not match the one recorded at send`;
   }
 }
 
@@ -77,6 +126,7 @@ function next(from: VersionStatus, event: Exclude<ProposalEvent['type'], 'edit'>
   }
 }
 
+/** Whether the current version's status allows the event. It does not check a view/sign/decline's version or hash. */
 export function canApply(p: Proposal, event: ProposalEvent['type']): boolean {
   const from = current(p).status;
   if (event === 'edit') return from === 'draft' || SUPERSEDABLE.includes(from);
@@ -106,8 +156,16 @@ export function transition(p: Proposal, event: ProposalEvent, at: string): Trans
     };
   }
 
+  const bound = event.type === 'view' || event.type === 'sign' || event.type === 'decline' ? event : null;
+  // A stale page is answered as stale first, whatever the current version's status (D-16).
+  if (bound && bound.version !== cur.number) throw new VersionMismatchError(from, bound.type, bound.version, cur.number);
   const to = next(from, event.type);
   if (!to) throw new TransitionError(from, event.type);
+  if (bound) {
+    const recorded = cur.pdfSha256 === null ? null : normalizeSha256(cur.pdfSha256);
+    if (!recorded) throw new MissingHashError(from, bound.type, cur.number);
+    if (normalizeSha256(bound.pdfSha256) !== recorded) throw new HashMismatchError(from, bound.type, cur.number);
+  }
   let v: Version = { ...cur, status: to };
   if (event.type === 'send') {
     const hash = normalizeSha256(event.pdfSha256);

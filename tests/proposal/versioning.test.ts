@@ -1,12 +1,17 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
+import { normalizeSha256 } from '@/lib/proposal/hash';
 import {
   canApply,
   current,
+  HashMismatchError,
   linkAccess,
+  MissingHashError,
   newProposal,
   transition,
   TransitionError,
+  VersionMismatchError,
+  type BoundEventType,
   type Proposal,
   type ProposalEvent,
   type VersionStatus,
@@ -16,9 +21,15 @@ const AT = '2026-11-14T12:00:00.000Z';
 const H1 = 'a'.repeat(64);
 const H2 = 'b'.repeat(64);
 
-const ev = (type: ProposalEvent['type'], hash = H1): ProposalEvent => (type === 'send' ? { type, pdfSha256: hash } : { type });
+const isBound = (t: ProposalEvent['type']): t is BoundEventType => t === 'view' || t === 'sign' || t === 'decline';
+/** The event as an honest client page on the current version would send it (view/sign/decline name that version and its hash). */
+const ev = (type: ProposalEvent['type'], p: Proposal, hash = H1): ProposalEvent => {
+  if (type === 'send') return { type, pdfSha256: hash };
+  if (isBound(type)) return { type, version: current(p).number, pdfSha256: current(p).pdfSha256 ?? hash };
+  return { type };
+};
 const run = (...types: ProposalEvent['type'][]): Proposal =>
-  types.reduce((p, t) => transition(p, ev(t), AT).proposal, newProposal(AT).proposal);
+  types.reduce((p, t) => transition(p, ev(t, p), AT).proposal, newProposal(AT).proposal);
 
 describe('transition table', () => {
   // [path to reach the state, event, resulting status of the current version, or 'reject']
@@ -57,9 +68,9 @@ describe('transition table', () => {
     const p = run(...path);
     expect(canApply(p, event)).toBe(expected !== 'reject');
     if (expected === 'reject') {
-      expect(() => transition(p, ev(event), AT)).toThrow(TransitionError);
+      expect(() => transition(p, ev(event, p), AT)).toThrow(TransitionError);
     } else {
-      expect(current(transition(p, ev(event), AT).proposal).status).toBe(expected);
+      expect(current(transition(p, ev(event, p), AT).proposal).status).toBe(expected);
     }
   });
 });
@@ -102,6 +113,63 @@ describe('supersede rules', () => {
   });
 });
 
+describe('view, sign and decline are bound to a version and its PDF hash (D-16)', () => {
+  /** v1 sent (H1) and viewed; the client's v1 page is still open. Then v1 is edited, v2 sent (H2) and viewed. */
+  function v2SentWhileV1PageOpen() {
+    const v1 = run('send', 'view');
+    const stalePage = { version: 1, pdfSha256: H1 };
+    const edited = transition(v1, { type: 'edit' }, AT).proposal;
+    const sent = transition(edited, { type: 'send', pdfSha256: H2 }, AT).proposal;
+    const viewed = transition(sent, { type: 'view', version: 2, pdfSha256: H2 }, AT).proposal;
+    return { stalePage, sent, viewed };
+  }
+
+  it('a sign from a stale v1 page after v2 is sent is rejected, and v2 is not signed', () => {
+    const { stalePage, viewed } = v2SentWhileV1PageOpen();
+    const before = structuredClone(viewed);
+    const attempt = () => transition(viewed, { type: 'sign', ...stalePage }, AT);
+    expect(attempt).toThrow(VersionMismatchError);
+    expect(attempt).toThrow('cannot sign version 1: version 2 is current');
+    expect(viewed).toEqual(before);
+    expect(current(viewed)).toMatchObject({ number: 2, status: 'viewed', pdfSha256: H2 });
+  });
+
+  it.each<BoundEventType>(['view', 'sign', 'decline'])('a stale-page %s is a version mismatch whatever v2’s status', (type) => {
+    const { stalePage, sent, viewed } = v2SentWhileV1PageOpen();
+    for (const p of [sent, viewed]) expect(() => transition(p, { type, ...stalePage }, AT)).toThrow(VersionMismatchError);
+  });
+
+  it('naming the current version with another version’s PDF hash is a hash mismatch', () => {
+    const { viewed } = v2SentWhileV1PageOpen();
+    expect(() => transition(viewed, { type: 'sign', version: 2, pdfSha256: H1 }, AT)).toThrow(HashMismatchError);
+    expect(() => transition(viewed, { type: 'decline', version: 2, pdfSha256: 'not-a-hash' }, AT)).toThrow(HashMismatchError);
+  });
+
+  it('the hash on the event is compared in canonical form (case, surrounding whitespace)', () => {
+    const { viewed } = v2SentWhileV1PageOpen();
+    const { proposal, audit } = transition(viewed, { type: 'sign', version: 2, pdfSha256: ` ${H2.toUpperCase()} ` }, AT);
+    expect(current(proposal)).toMatchObject({ number: 2, status: 'signed', pdfSha256: H2 });
+    expect(audit).toMatchObject([{ action: 'version.signed', version: 2 }]);
+  });
+
+  it.each<BoundEventType>(['sign', 'decline', 'view'])('a %s on a version whose recorded hash is null is rejected', (type) => {
+    // Not reachable through transition() (send always records a hash), but a row loaded from the database can carry null.
+    const p: Proposal = { versions: [{ number: 1, status: 'viewed', pdfSha256: null, revision: 1 }] };
+    const attempt = () => transition(p, { type, version: 1, pdfSha256: H1 }, AT);
+    expect(attempt).toThrow(MissingHashError);
+    expect(attempt).toThrow(`cannot ${type} version 1: it has no recorded PDF hash`);
+  });
+
+  it('a malformed recorded hash counts as missing', () => {
+    const p: Proposal = { versions: [{ number: 1, status: 'viewed', pdfSha256: 'abc', revision: 1 }] };
+    expect(() => transition(p, { type: 'sign', version: 1, pdfSha256: 'abc' }, AT)).toThrow(MissingHashError);
+  });
+
+  it('the new errors are TransitionErrors, so existing callers that catch TransitionError still catch them', () => {
+    for (const E of [VersionMismatchError, MissingHashError, HashMismatchError]) expect(E.prototype).toBeInstanceOf(TransitionError);
+  });
+});
+
 describe('linkAccess (CS-03)', () => {
   it.each<[string, ProposalEvent['type'][], number, number, string]>([
     ['sent link works', ['send'], 1, 200, 'active'],
@@ -121,31 +189,60 @@ describe('linkAccess (CS-03)', () => {
 
 // ---------- properties: random event sequences ----------
 
-const eventArb: fc.Arbitrary<ProposalEvent> = fc.oneof(
-  fc.constantFrom<ProposalEvent>({ type: 'view' }, { type: 'sign' }, { type: 'decline' }, { type: 'expire' }, { type: 'edit' }),
-  fc.stringMatching(/^[0-9a-f]{64}$/).map((h): ProposalEvent => ({ type: 'send', pdfSha256: h })),
+const hexArb = fc.stringMatching(/^[0-9a-f]{64}$/);
+
+/** How a view/sign/decline page relates to the proposal when it is submitted. Most are honest; the rest are stale or forged. */
+type Aim = 'current' | 'stale' | 'future' | 'otherHash';
+type Intent =
+  | Exclude<ProposalEvent, { type: BoundEventType }>
+  | { type: BoundEventType; aim: Aim; hash: string };
+
+const intentArb: fc.Arbitrary<Intent> = fc.oneof(
+  fc.constantFrom<Intent>({ type: 'expire' }, { type: 'edit' }),
+  hexArb.map((h): Intent => ({ type: 'send', pdfSha256: h })),
+  fc.record({
+    type: fc.constantFrom<BoundEventType>('view', 'sign', 'decline'),
+    aim: fc.constantFrom<Aim>('current', 'current', 'current', 'stale', 'future', 'otherHash'),
+    hash: hexArb,
+  }),
 );
 
-type Step = { before: Proposal; event: ProposalEvent; after: Proposal; audit: ReturnType<typeof transition>['audit'] | null };
+function resolve(i: Intent, p: Proposal): ProposalEvent {
+  if (!('aim' in i)) return i;
+  const c = current(p);
+  const version = i.aim === 'stale' ? c.number - 1 : i.aim === 'future' ? c.number + 1 : c.number;
+  let pdfSha256 = i.aim === 'otherHash' ? i.hash : (c.pdfSha256 ?? i.hash);
+  if (i.aim === 'otherHash' && pdfSha256 === c.pdfSha256) pdfSha256 = pdfSha256 === H1 ? H2 : H1;
+  return { type: i.type, version, pdfSha256 };
+}
 
-function play(events: ProposalEvent[]): { final: Proposal; steps: Step[] } {
+type Step = {
+  before: Proposal;
+  event: ProposalEvent;
+  after: Proposal;
+  audit: ReturnType<typeof transition>['audit'] | null;
+  error: TransitionError | null;
+};
+
+function play(intents: Intent[]): { final: Proposal; steps: Step[] } {
   let p = newProposal(AT).proposal;
   const steps: Step[] = [];
-  for (const event of events) {
+  for (const intent of intents) {
+    const event = resolve(intent, p);
     try {
       const r = transition(p, event, AT);
-      steps.push({ before: p, event, after: r.proposal, audit: r.audit });
+      steps.push({ before: p, event, after: r.proposal, audit: r.audit, error: null });
       p = r.proposal;
     } catch (e) {
       if (!(e instanceof TransitionError)) throw e;
-      steps.push({ before: p, event, after: p, audit: null });
+      steps.push({ before: p, event, after: p, audit: null, error: e });
     }
   }
   return { final: p, steps };
 }
 
 describe('versioning properties', () => {
-  const seqArb = fc.array(eventArb, { maxLength: 40 });
+  const seqArb = fc.array(intentArb, { maxLength: 40 });
 
   it('at most one live version; numbers run 1..n; every earlier version is superseded', () => {
     fc.assert(
@@ -187,6 +284,62 @@ describe('versioning properties', () => {
             if (b.status === 'signed' || b.status === 'superseded') expect(a).toEqual(b);
           }
         }
+      }),
+    );
+  });
+
+  it('a view, sign or decline lands only on the version and PDF it names, and is rejected with the right error otherwise (D-16)', () => {
+    fc.assert(
+      fc.property(seqArb, (events) => {
+        for (const s of play(events).steps) {
+          const e = s.event;
+          if (e.type !== 'view' && e.type !== 'sign' && e.type !== 'decline') continue;
+          const c = current(s.before);
+          const versionOk = e.version === c.number;
+          const hashOk = c.pdfSha256 !== null && normalizeSha256(e.pdfSha256) === c.pdfSha256;
+          if (s.audit) {
+            expect(versionOk && hashOk).toBe(true);
+            expect(s.audit.map((a) => a.version)).toEqual([e.version]);
+            expect(s.after.versions.find((v) => v.number === e.version)!.pdfSha256).toBe(normalizeSha256(e.pdfSha256));
+          } else if (!versionOk) {
+            expect(s.error).toBeInstanceOf(VersionMismatchError);
+          } else if (canApply(s.before, e.type) && !hashOk) {
+            expect(s.error).toBeInstanceOf(HashMismatchError);
+          } else {
+            expect(s.error?.constructor).toBe(TransitionError); // the status forbids it: same as before D-16
+          }
+        }
+      }),
+    );
+  });
+
+  it('every signed version was signed by an event naming that version and its recorded hash (D-16)', () => {
+    fc.assert(
+      fc.property(seqArb, (events) => {
+        for (const s of play(events).steps) {
+          if (s.event.type !== 'sign' || !s.audit) continue;
+          const signed = s.after.versions.find((v) => v.status === 'signed')!;
+          expect(signed.number).toBe(s.event.version);
+          expect(signed.pdfSha256).toBe(normalizeSha256(s.event.pdfSha256));
+        }
+      }),
+    );
+  });
+
+  it('with the recorded hash nulled out, no view, sign or decline is ever accepted (D-16)', () => {
+    fc.assert(
+      fc.property(seqArb, fc.constantFrom<BoundEventType>('view', 'sign', 'decline'), hexArb, (events, type, hash) => {
+        const { final } = play(events);
+        const c = current(final);
+        const p: Proposal = { versions: [...final.versions.slice(0, -1), { ...c, pdfSha256: null }] };
+        let err: unknown = null;
+        try {
+          transition(p, { type, version: c.number, pdfSha256: c.pdfSha256 ?? hash }, AT);
+        } catch (e) {
+          err = e;
+        }
+        expect(err).toBeInstanceOf(TransitionError);
+        if (canApply(p, type)) expect(err).toBeInstanceOf(MissingHashError);
       }),
     );
   });

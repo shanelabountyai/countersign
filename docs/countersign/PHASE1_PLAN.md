@@ -54,6 +54,8 @@ versions; the last one is current, at most one version is not `superseded`.
 
 - Sign and decline need a prior view (the client must open the link). `send` needs the version's PDF hash (recorded at send,
   frozen from then on).
+- `view`, `sign` and `decline` name the `version` and `pdfSha256` the client's page showed (D-16): a different current
+  version → `VersionMismatchError`, no recorded hash → `MissingHashError`, a different hash → `HashMismatchError`.
 - `linkAccess(proposal, version)`: current + sent/viewed → 200 `active`; current + signed → 200 `completed` (read-only);
   superseded → **410** (CS-03); declined/expired → 410; unknown version → 404.
 - Every accepted event returns its audit events: one per status change (a supersede yields two: `version.superseded` and
