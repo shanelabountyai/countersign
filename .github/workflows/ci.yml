@@ -48,6 +48,16 @@ jobs:
       - run: npm run typecheck
       - run: createdb countersign_test
       - run: npx prisma migrate deploy
+      # Countersign (D-27): the clone's migrations are hand-written, so prove they produce exactly prisma/schema for its own
+      # tables. Template/billing drift (billing was removed, D-0B) is the foundation's and is ignored here.
+      - name: Countersign tables match prisma/schema
+        if: matrix.rls == 'off'
+        run: |
+          npx prisma migrate diff --from-config-datasource --to-schema prisma/schema --script > "$RUNNER_TEMP/schema-diff.sql"
+          cat "$RUNNER_TEMP/schema-diff.sql"
+          if grep -nE '"(Template|TemplateSection|TemplateLine|Proposal|ProposalVersion|ProposalSection|ProposalLine|ProposalStatus|LineKind|SectionKind|DiscountType)"' "$RUNNER_TEMP/schema-diff.sql"; then
+            echo "::error::Countersign migrations do not match prisma/schema (lines above)"; exit 1
+          fi
       - name: RLS enforce leg — app role, system URL
         if: matrix.rls == 'enforce'
         run: |
