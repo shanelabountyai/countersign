@@ -1,0 +1,151 @@
+// Countersign (build-log #30), Phase 2: templates, proposals and their versions. Clone-owned.
+// Content lives on the version (D-20); a version that has left `draft` is frozen by triggers (D-21,
+// migration 20261115000001_countersign_freeze). Money in integer cents (D-03, BigInt per D-22), quantities in
+// thousandths (D-08), rates in basis points.
+
+enum ProposalStatus {
+  draft
+  sent
+  viewed
+  signed
+  declined
+  expired
+  superseded
+}
+
+enum LineKind {
+  fixed
+  hourly
+  per_unit
+}
+
+enum SectionKind {
+  section
+  terms
+}
+
+enum DiscountType {
+  percent // discountValue in basis points
+  fixed // discountValue in cents
+}
+
+model Template {
+  id        String            @id @default(uuid()) @db.Uuid
+  orgId     String            @db.Uuid
+  org       Org               @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime          @updatedAt @db.Timestamptz(6)
+  sections  TemplateSection[]
+  lines     TemplateLine[]
+  proposals Proposal[]
+
+  @@index([orgId])
+}
+
+/// A section or terms block. `body` may hold merge fields: {{client}}, {{scope}}, {{timeline}} (D-25).
+model TemplateSection {
+  id         String      @id @default(uuid()) @db.Uuid
+  orgId      String      @db.Uuid
+  templateId String      @db.Uuid
+  template   Template    @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  position   Int
+  kind       SectionKind
+  title      String
+  body       String
+
+  @@unique([templateId, position])
+}
+
+/// A reusable line item. `optional` lines are add-ons; `selected` is whether one starts switched on.
+model TemplateLine {
+  id             String        @id @default(uuid()) @db.Uuid
+  orgId          String        @db.Uuid
+  templateId     String        @db.Uuid
+  template       Template      @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  position       Int
+  kind           LineKind
+  description    String
+  unitPriceCents BigInt
+  quantityMilli  Int           @default(1000)
+  taxRateBps     Int           @default(0)
+  discountType   DiscountType?
+  discountValue  BigInt?
+  optional       Boolean       @default(false)
+  selected       Boolean       @default(false)
+
+  @@unique([templateId, position])
+}
+
+model Proposal {
+  id          String            @id @default(uuid()) @db.Uuid
+  orgId       String            @db.Uuid
+  org         Org               @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  templateId  String?           @db.Uuid
+  template    Template?         @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdById String?           @db.Uuid // no FK, like ApiKey.createdById: the proposal outlives a removed member
+  createdAt   DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(6)
+  versions    ProposalVersion[]
+
+  @@index([orgId])
+}
+
+/// One version of a proposal: the whole document. Once it leaves `draft`, only `status` and `statusAt` may change,
+/// and only along the Phase 1 table; `signed` and `superseded` rows never change (D-21).
+model ProposalVersion {
+  id            String            @id @default(uuid()) @db.Uuid
+  orgId         String            @db.Uuid
+  proposalId    String            @db.Uuid
+  proposal      Proposal          @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  number        Int
+  status        ProposalStatus    @default(draft)
+  statusAt      DateTime          @db.Timestamptz(6)
+  revision      Int               @default(1) // bumped by each in-place draft save (D-26)
+  pdfSha256     String? // SHA-256 hex of the exact PDF bytes, set at send (CS-02, D-14)
+  title         String
+  clientName    String // the {{client}} merge field
+  clientEmail   String            @default("")
+  scope         String            @default("") // {{scope}}
+  timeline      String            @default("") // {{timeline}}
+  discountType  DiscountType?
+  discountValue BigInt?
+  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  sections      ProposalSection[]
+  lines         ProposalLine[]
+
+  @@unique([proposalId, number])
+  @@index([orgId])
+}
+
+model ProposalSection {
+  id        String          @id @default(uuid()) @db.Uuid
+  orgId     String          @db.Uuid
+  versionId String          @db.Uuid
+  version   ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  position  Int
+  kind      SectionKind
+  title     String
+  body      String
+
+  @@unique([versionId, position])
+}
+
+model ProposalLine {
+  id             String          @id @default(uuid()) @db.Uuid
+  orgId          String          @db.Uuid
+  versionId      String          @db.Uuid
+  version        ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  position       Int
+  kind           LineKind
+  description    String
+  unitPriceCents BigInt
+  quantityMilli  Int             @default(1000)
+  taxRateBps     Int             @default(0)
+  discountType   DiscountType?
+  discountValue  BigInt?
+  optional       Boolean         @default(false)
+  selected       Boolean         @default(false)
+
+  @@unique([versionId, position])
+}
