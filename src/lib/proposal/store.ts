@@ -458,3 +458,9 @@ export async function deleteProposal(ctx: OrgCtx, proposalId: string) {
     await audit(ctx, 'proposal.deleted', { targetType: 'proposal', targetId: proposalId }, tx);
   }));
 }
+
+/** notFound unless the row is in this org. Actions call it before parsing the form, so "not yours" ≡ "not found" (INV-04). */
+export async function requireInOrg(ctx: OrgCtx, model: 'proposal' | 'template', id: string) {
+  const n = await withOrg(ctx, (tx) => (model === 'proposal' ? tx.proposal.count({ where: { id, orgId: ctx.orgId } }) : tx.template.count({ where: { id, orgId: ctx.orgId } })), { atomic: false });
+  if (n !== 1) notFound();
+}
