@@ -65,7 +65,8 @@ versions; the last one is current, at most one version is not `superseded`.
 
 `sha256Hex(bytes)` over the exact `Uint8Array` (no text decoding, no normalization). `verifySha256(bytes, hex)` lower-cases
 the expected hex, rejects anything not 64 hex chars, compares with `timingSafeEqual`. `matchSignedVersion(bytes, candidates)`
-returns the matching signed version or `null` (Phase 4 verify page).
+returns the matching version whose status is `signed` (D-17) or `null` (Phase 4 verify page). One normalizer, `normalizeSha256`
+in `sha256-hex.ts`, serves send, view/sign/decline and verify (D-15).
 
 ## Gate
 

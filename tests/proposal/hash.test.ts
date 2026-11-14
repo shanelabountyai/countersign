@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { matchSignedVersion, normalizeSha256, sha256Hex, verifySha256 } from '@/lib/proposal/hash';
-import { current, newProposal, transition } from '@/lib/proposal/versioning';
+import { matchSignedVersion, normalizeSha256, sha256Hex, verifySha256, type SignedCandidate } from '@/lib/proposal/hash';
+import { current, newProposal, transition, type VersionStatus } from '@/lib/proposal/versioning';
 
 const AT = '2026-11-14T12:00:00.000Z';
 
@@ -51,10 +51,10 @@ describe('verifySha256 / normalizeSha256', () => {
 describe('matchSignedVersion', () => {
   const v1 = bytes('version 1');
   const v2 = bytes('version 2');
-  const candidates = [
-    { versionId: 'v1', pdfSha256: sha256Hex(v1) },
-    { versionId: 'bad', pdfSha256: 'not-a-hash' },
-    { versionId: 'v2', pdfSha256: sha256Hex(v2).toUpperCase() },
+  const candidates: SignedCandidate[] = [
+    { versionId: 'v1', status: 'signed', pdfSha256: sha256Hex(v1) },
+    { versionId: 'bad', status: 'signed', pdfSha256: 'not-a-hash' },
+    { versionId: 'v2', status: 'signed', pdfSha256: sha256Hex(v2).toUpperCase() },
   ];
   it('finds the version these bytes are', () => {
     expect(matchSignedVersion(v2, candidates)?.versionId).toBe('v2');
@@ -63,6 +63,21 @@ describe('matchSignedVersion', () => {
   it('returns null for anything else', () => {
     expect(matchSignedVersion(bytes('version 3'), candidates)).toBeNull();
     expect(matchSignedVersion(v1, [])).toBeNull();
+  });
+  it.each<VersionStatus>(['draft', 'sent', 'viewed', 'declined', 'expired', 'superseded'])(
+    'a %s version with the matching hash is not a signed match (D-17)',
+    (status) => {
+      expect(matchSignedVersion(v1, [{ versionId: 'v1', status, pdfSha256: sha256Hex(v1) }])).toBeNull();
+    },
+  );
+  it('skips the superseded v1 and finds the signed v2 when both are listed, and ignores a null hash', () => {
+    const list: SignedCandidate[] = [
+      { versionId: 'v1', status: 'superseded', pdfSha256: sha256Hex(v1) },
+      { versionId: 'v0', status: 'signed', pdfSha256: null },
+      { versionId: 'v2', status: 'signed', pdfSha256: sha256Hex(v2) },
+    ];
+    expect(matchSignedVersion(v1, list)).toBeNull();
+    expect(matchSignedVersion(v2, list)?.versionId).toBe('v2');
   });
 });
 
@@ -149,11 +164,23 @@ describe('CS-02 properties', () => {
     );
   });
 
+  it('only a signed candidate ever matches, whatever the statuses in the list (D-17)', () => {
+    const statusArb = fc.constantFrom<VersionStatus>('draft', 'sent', 'viewed', 'signed', 'declined', 'expired', 'superseded');
+    fc.assert(
+      fc.property(docArb, fc.array(statusArb, { minLength: 1, maxLength: 6 }), (d, statuses) => {
+        const list = statuses.map((status, i): SignedCandidate => ({ versionId: `v${i + 1}`, status, pdfSha256: sha256Hex(d) }));
+        const hit = matchSignedVersion(d, list);
+        expect(hit).toBe(list.find((c) => c.status === 'signed') ?? null);
+      }),
+      { numRuns: 300 },
+    );
+  });
+
   it('distinct documents never match each other\'s recorded hash', () => {
     fc.assert(
       fc.property(docArb, docArb, (a, b) => {
         fc.pre(Buffer.compare(Buffer.from(a), Buffer.from(b)) !== 0);
-        expect(matchSignedVersion(b, [{ versionId: 'a', pdfSha256: sha256Hex(a) }])).toBeNull();
+        expect(matchSignedVersion(b, [{ versionId: 'a', status: 'signed', pdfSha256: sha256Hex(a) }])).toBeNull();
       }),
       { numRuns: 300 },
     );

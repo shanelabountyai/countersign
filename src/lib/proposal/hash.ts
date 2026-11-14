@@ -2,6 +2,7 @@
 // byte is a different document.
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { normalizeSha256 } from './sha256-hex';
+import type { VersionStatus } from './versioning';
 
 export { normalizeSha256 };
 
@@ -17,12 +18,16 @@ export function verifySha256(bytes: Uint8Array, expectedHex: string): boolean {
   return timingSafeEqual(Buffer.from(sha256Hex(bytes), 'hex'), Buffer.from(expected, 'hex'));
 }
 
-export type SignedCandidate = { versionId: string; pdfSha256: string };
+export type SignedCandidate = { versionId: string; status: VersionStatus; pdfSha256: string | null };
 
-/** The signed version whose recorded hash matches these bytes, or null (Phase 4 verify page). */
+/**
+ * The signed version whose recorded hash matches these bytes, or null (Phase 4 verify page). Only a version whose status is
+ * `signed` can match (D-17): a superseded, declined or merely sent version keeps its hash but was never signed.
+ */
 export function matchSignedVersion<T extends SignedCandidate>(bytes: Uint8Array, candidates: readonly T[]): T | null {
   const actual = Buffer.from(sha256Hex(bytes), 'hex');
   for (const c of candidates) {
+    if (c.status !== 'signed' || c.pdfSha256 === null) continue;
     const expected = normalizeSha256(c.pdfSha256);
     if (expected && timingSafeEqual(actual, Buffer.from(expected, 'hex'))) return c;
   }
