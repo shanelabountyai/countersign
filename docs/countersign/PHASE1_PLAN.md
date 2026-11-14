@@ -14,7 +14,7 @@ beyond `node:crypto`. Phase 2 (schema, templates, editor) builds on these and is
 | `tests/proposal/versioning.test.ts` | transition table + fast-check random event sequences | CS-03, CS-04 |
 | `tests/proposal/hash.test.ts` | known vectors + fast-check byte-mutation properties | CS-02 |
 
-## Pricing model (D-08 … D-11)
+## Pricing model (D-08 … D-10, D-18)
 
 - Money is integer cents (D-03). Quantity is integer **thousandths** (`quantityMilli`: 1.5 h = 1500), so hourly and
   per-unit quantities stay exact. Rates are integer **basis points** (`taxRateBps`: 8.25 % = 825; percent discounts the same).
@@ -32,8 +32,11 @@ beyond `node:crypto`. Phase 2 (schema, templates, editor) builds on these and is
    fixed capped at the subtotal), then **allocated to the included lines pro rata** to their post-line-discount amount by
    the **largest-remainder method**; remainder cents go to the largest fractional parts, ties broken by **line id**
    (never by position). The allocated parts sum exactly to the total discount.
-4. **Tax per line** on that line's taxable amount (after both discounts), rounded half up; the proposal tax is the **sum of
-   line taxes** (not tax on the subtotal).
+4. **Tax once per rate** (D-18, supersedes D-11): included lines are grouped by `taxRateBps`; each group's tax is its
+   **taxable subtotal** (after both discounts) × rate, rounded half up **once**. The proposal tax is the sum over rates;
+   `taxes[]` lists each non-zero rate (ascending) with its taxable subtotal and tax. For display, each group's tax is
+   **allocated back to its lines** by largest remainder pro rata to taxable amount, ties by line id (as rule 3), so line
+   taxes sum exactly to the group's tax. Rates are capped at **10000 bps (100 %)**; a higher rate is a `PricingError`.
 5. **Total** = Σ taxable + Σ tax. Every figure in the result is an integer and every total is the sum of its line parts.
 
 Stability under reordering (CS-01): each line's figures depend only on that line and on order-independent sums; the one

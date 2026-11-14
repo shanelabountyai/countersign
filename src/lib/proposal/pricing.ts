@@ -10,7 +10,7 @@ export type LineItem = {
   unitPriceCents: number;
   /** Thousandths of a unit (1.5 hours = 1500). Ignored for `fixed`, which is always 1. */
   quantityMilli?: number;
-  /** 8.25 % = 825. */
+  /** 8.25 % = 825. At most 10000 (100 %), see LIMITS.taxRateBps. */
   taxRateBps?: number;
   discount?: Discount;
   optional?: boolean;
@@ -27,9 +27,13 @@ export type LineResult = {
   lineDiscountCents: number;
   allocatedDiscountCents: number;
   taxableCents: number;
+  /** This line's share of its rate's tax (D-18): a display allocation, not tax computed on the line. */
   taxCents: number;
   totalCents: number;
 };
+
+/** One tax rate's group: tax is computed on the group's taxable subtotal and rounded once (D-18). */
+export type TaxGroup = { taxRateBps: number; taxableCents: number; taxCents: number };
 
 export type PricingResult = {
   lines: LineResult[];
@@ -40,7 +44,10 @@ export type PricingResult = {
   subtotalCents: number;
   proposalDiscountCents: number;
   taxableCents: number;
+  /** Σ over taxes[].taxCents. */
   taxCents: number;
+  /** One entry per distinct non-zero rate among included lines, ascending by rate. */
+  taxes: TaxGroup[];
   totalCents: number;
 };
 
@@ -51,7 +58,7 @@ export class PricingError extends Error {
 const MILLI = 1000n;
 const BPS = 10000n;
 /** Upper bounds keep every intermediate product exact and every result a safe integer. */
-export const LIMITS = { unitPriceCents: 10_000_000_000, quantityMilli: 100_000_000, bps: 100_000, lines: 1000 } as const;
+export const LIMITS = { unitPriceCents: 10_000_000_000, quantityMilli: 100_000_000, bps: 100_000, taxRateBps: 10_000, lines: 1000 } as const;
 
 function int(name: string, v: number, max: number): bigint {
   if (!Number.isSafeInteger(v) || v < 0 || v > max) throw new PricingError(`${name} must be an integer in [0, ${max}], got ${v}`);
@@ -122,6 +129,7 @@ export function price(input: PricingInput): PricingResult {
     const unit = int('unitPriceCents', l.unitPriceCents, LIMITS.unitPriceCents);
     const qty = l.kind === 'fixed' ? MILLI : int('quantityMilli', l.quantityMilli ?? 1000, LIMITS.quantityMilli);
     const tax = int('taxRateBps', l.taxRateBps ?? 0, LIMITS.bps);
+    if (tax > BigInt(LIMITS.taxRateBps)) throw new PricingError(`line ${l.id}: taxRateBps ${l.taxRateBps} is above the cap of ${LIMITS.taxRateBps} (100 %)`);
     const included = isIncluded(l);
     const extended = included ? divRoundHalfUp(unit * qty, MILLI) : 0n; // rule 1
     const lineDiscount = included ? discountAmount(extended, l.discount, 'line') : 0n; // rule 2
@@ -133,10 +141,25 @@ export function price(input: PricingInput): PricingResult {
   const proposalDiscount = discountAmount(subtotal, input.discount, 'proposal'); // rule 3
   const alloc = allocate(proposalDiscount, stage1.filter((l) => l.included).map((l) => ({ id: l.id, weight: l.net })));
 
-  const lines: LineResult[] = stage1.map((l) => {
-    const allocated = alloc.get(l.id) ?? 0n;
-    const taxable = l.net - allocated;
-    const tax = divRoundHalfUp(taxable * l.tax, BPS); // rule 4
+  const stage2 = stage1.map((l) => ({ ...l, allocated: alloc.get(l.id) ?? 0n, taxable: l.net - (alloc.get(l.id) ?? 0n) }));
+
+  // Rule 4 (D-18): per rate, tax = taxable subtotal × rate, rounded half up once; then split back over that rate's lines
+  // by largest remainder (ties by id), so line taxes sum exactly to the rate's tax.
+  const byRate = new Map<bigint, { id: string; weight: bigint }[]>();
+  for (const l of stage2) if (l.included && l.tax > 0n) byRate.set(l.tax, [...(byRate.get(l.tax) ?? []), { id: l.id, weight: l.taxable }]);
+  const lineTax = new Map<string, bigint>();
+  const taxes: TaxGroup[] = [...byRate.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([rate, parts]) => {
+      const taxable = parts.reduce((s, p) => s + p.weight, 0n);
+      const tax = divRoundHalfUp(taxable * rate, BPS); // ≤ taxable, since rate ≤ 100 %
+      for (const [id, t] of allocate(tax, parts)) lineTax.set(id, t);
+      return { taxRateBps: safe(rate), taxableCents: safe(taxable), taxCents: safe(tax) };
+    });
+
+  const lines: LineResult[] = stage2.map((l) => {
+    const { allocated, taxable } = l;
+    const tax = lineTax.get(l.id) ?? 0n;
     return {
       id: l.id,
       included: l.included,
@@ -158,6 +181,7 @@ export function price(input: PricingInput): PricingResult {
     proposalDiscountCents: safe(proposalDiscount),
     taxableCents: sum('taxableCents'),
     taxCents: sum('taxCents'),
+    taxes,
     totalCents: sum('totalCents'), // rule 5
   };
 }

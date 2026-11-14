@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { allocate, divRoundHalfUp, price, PricingError, type Discount, type LineItem, type PricingResult } from '@/lib/proposal/pricing';
+import { allocate, divRoundHalfUp, LIMITS, price, PricingError, type Discount, type LineItem, type PricingResult } from '@/lib/proposal/pricing';
 
 // CS-01: pricing totals are exact in integer cents and stable under line reordering.
 
@@ -30,8 +30,14 @@ describe('price: table', () => {
     ['per-unit fraction rounds half up', [line('a', { kind: 'per_unit', unitPriceCents: 1000, quantityMilli: 1 }), line('b', { kind: 'per_unit', unitPriceCents: 1, quantityMilli: 3333 })], undefined, { grossCents: 4, totalCents: 4 }],
     ['half-cent per-unit rounds up', [line('a', { kind: 'per_unit', unitPriceCents: 1, quantityMilli: 500 })], undefined, { totalCents: 1 }],
     ['tax 8.25 % on $100', [line('a', { taxRateBps: 825 })], undefined, { taxCents: 825, totalCents: 10825 }],
-    ['tax rounds half up per line', [line('a', { unitPriceCents: 100, taxRateBps: 50 }), line('b', { unitPriceCents: 100, taxRateBps: 50 })], undefined, { taxCents: 2, totalCents: 202 }],
-    ['tax is the sum of line taxes, not tax on the total', [line('a', { unitPriceCents: 10, taxRateBps: 500 }), line('b', { unitPriceCents: 10, taxRateBps: 500 })], undefined, { taxCents: 2, totalCents: 22 }],
+    // D-18: tax is rounded once per rate on that rate's taxable subtotal, not per line
+    ['tax rounds once per rate (0.5 % of 200 = 1)', [line('a', { unitPriceCents: 100, taxRateBps: 50 }), line('b', { unitPriceCents: 100, taxRateBps: 50 })], undefined, { taxCents: 1, totalCents: 201 }],
+    ['tax is on the rate subtotal, not the sum of line taxes', [line('a', { unitPriceCents: 10, taxRateBps: 500 }), line('b', { unitPriceCents: 10, taxRateBps: 500 })], undefined, { taxCents: 1, totalCents: 21 }],
+    ['review example: 10 lines of 5¢ at 10 % → 5¢', 'abcdefghij'.split('').map((id) => line(id, { unitPriceCents: 5, taxRateBps: 1000 })), undefined, { taxableCents: 50, taxCents: 5, totalCents: 55, taxes: [{ taxRateBps: 1000, taxableCents: 50, taxCents: 5 }] }],
+    // 5 %: 10 + 10 = 20 → 1 (per line would be 2); 10 %: 5 + 5 + 5 = 15 → 1.5 → 2 (per line would be 3)
+    ['each rate is rounded once', [line('a', { unitPriceCents: 10, taxRateBps: 500 }), line('b', { unitPriceCents: 10, taxRateBps: 500 }), line('c', { unitPriceCents: 5, taxRateBps: 1000 }), line('d', { unitPriceCents: 5, taxRateBps: 1000 }), line('e', { unitPriceCents: 5, taxRateBps: 1000 }), line('f', { unitPriceCents: 7 })], undefined, { taxCents: 3, totalCents: 45, taxes: [{ taxRateBps: 500, taxableCents: 20, taxCents: 1 }, { taxRateBps: 1000, taxableCents: 15, taxCents: 2 }] }],
+    ['tax rate of exactly 100 % is accepted', [line('a', { taxRateBps: 10000 })], undefined, { taxCents: 10000, totalCents: 20000 }],
+    ['unselected optional lines add no tax group', [line('a', { taxRateBps: 500 }), line('b', { optional: true, taxRateBps: 1000 })], undefined, { taxes: [{ taxRateBps: 500, taxableCents: 10000, taxCents: 500 }] }],
     ['line percent discount 10 %', [line('a', { discount: { type: 'percent', bps: 1000 } })], undefined, { lineDiscountCents: 1000, totalCents: 9000 }],
     ['line fixed discount capped at the line', [line('a', { discount: { type: 'fixed', cents: 50000 } })], undefined, { lineDiscountCents: 10000, totalCents: 0 }],
     ['proposal fixed discount capped at subtotal', [line('a')], { type: 'fixed', cents: 99999 }, { proposalDiscountCents: 10000, totalCents: 0 }],
@@ -51,6 +57,16 @@ describe('price: table', () => {
     expect([r.a!.allocatedDiscountCents, r.b!.allocatedDiscountCents, r.c!.allocatedDiscountCents]).toEqual([34, 33, 33]);
   });
 
+  it('splits a rate\'s tax over its lines by largest remainder, ties by id', () => {
+    // 10 × 5¢ at 10 %: each line's exact share is 0.5¢; the 5¢ go to the five lowest ids, whatever the input order
+    const ids = 'jihgfedcba'.split('');
+    const r = byId(price({ lines: ids.map((id) => line(id, { unitPriceCents: 5, taxRateBps: 1000 })) }));
+    expect('abcdefghij'.split('').map((id) => r[id]!.taxCents)).toEqual([1, 1, 1, 1, 1, 0, 0, 0, 0, 0]);
+    // pro rata: 300 and 100 at 5 % = 20 → 15 and 5
+    const s = byId(price({ lines: [line('x', { unitPriceCents: 300, taxRateBps: 500 }), line('y', { unitPriceCents: 100, taxRateBps: 500 })] }));
+    expect([s.x!.taxCents, s.y!.taxCents]).toEqual([15, 5]);
+  });
+
   it('breaks down every line', () => {
     const r = price({ lines: [line('a', { kind: 'hourly', unitPriceCents: 12345, quantityMilli: 2750, taxRateBps: 725, discount: { type: 'percent', bps: 500 } })] });
     // 12345 × 2.75 = 33948.75 → 33949; 5 % = 1697.45 → 1697; net 32252; tax 7.25 % = 2338.27 → 2338
@@ -66,8 +82,16 @@ describe('price: table', () => {
     ['discount over 100 %', [line('a', { discount: { type: 'percent', bps: 10001 } })]],
     ['negative proposal discount', [line('a')], { type: 'fixed', cents: -5 }],
     ['unknown kind', [line('a', { kind: 'retainer' as LineItem['kind'] })]],
+    ['tax rate above 100 %', [line('a', { taxRateBps: 10001 })]],
+    ['tax rate above 100 % on an unselected optional line', [line('a', { optional: true, taxRateBps: 99999 })]],
+    ['fractional tax rate', [line('a', { taxRateBps: 82.5 })]],
   ])('rejects %s', (_name, lines, discount) => {
     expect(() => price({ lines, discount })).toThrow(PricingError);
+  });
+
+  it('names the tax cap in the error', () => {
+    expect(LIMITS.taxRateBps).toBe(10000);
+    expect(() => price({ lines: [line('a', { taxRateBps: 100000 })] })).toThrow(/line a: taxRateBps 100000 is above the cap of 10000 \(100 %\)/);
   });
 });
 
@@ -97,7 +121,7 @@ const linesArb = fc
       kind: fc.constantFrom('fixed' as const, 'hourly' as const, 'per_unit' as const),
       unitPriceCents: fc.integer({ min: 0, max: 50_000_000 }),
       quantityMilli: fc.integer({ min: 0, max: 2_000_000 }),
-      taxRateBps: fc.integer({ min: 0, max: 2500 }),
+      taxRateBps: fc.oneof(fc.constantFrom(0, 500, 825, 1000), fc.integer({ min: 0, max: 10000 })),
       discount: discountArb,
       optional: fc.boolean(),
       selected: fc.boolean(),
@@ -127,6 +151,35 @@ describe('price: CS-01 properties', () => {
           expect(l.allocatedDiscountCents).toBeLessThanOrEqual(l.extendedCents - l.lineDiscountCents);
           expect(l.totalCents).toBe(l.taxableCents + l.taxCents);
         }
+      }),
+      { numRuns: 500 },
+    );
+  });
+
+  it('D-18: tax is rounded once per rate on the rate subtotal, and line taxes split it exactly', () => {
+    fc.assert(
+      fc.property(inputArb, ({ lines, discount }) => {
+        const r = price({ lines, discount });
+        const included = r.lines.filter((l) => l.included);
+        const rateOf = new Map(lines.map((l) => [l.id, l.taxRateBps ?? 0]));
+        const rates = [...new Set(included.map((l) => rateOf.get(l.id)!))].filter((x) => x > 0).sort((a, b) => a - b);
+        expect(r.taxes.map((t) => t.taxRateBps)).toEqual(rates);
+        for (const g of r.taxes) {
+          const members = included.filter((l) => rateOf.get(l.id) === g.taxRateBps);
+          const taxable = members.reduce((s, l) => s + l.taxableCents, 0);
+          expect(g.taxableCents).toBe(taxable);
+          expect(g.taxCents).toBe(Number(divRoundHalfUp(BigInt(taxable) * BigInt(g.taxRateBps), 10000n))); // rounded once
+          expect(members.reduce((s, l) => s + l.taxCents, 0)).toBe(g.taxCents); // allocation sums exactly
+          for (const l of members) {
+            // each line gets the floor of its exact pro-rata share, or one cent more when the share is fractional
+            const [T, w, W] = [BigInt(g.taxCents), BigInt(l.taxableCents), BigInt(g.taxableCents)];
+            const floor = W === 0n ? 0n : (T * w) / W;
+            const fractional = W !== 0n && (T * w) % W !== 0n;
+            expect([floor, ...(fractional ? [floor + 1n] : [])]).toContain(BigInt(l.taxCents));
+          }
+        }
+        expect(r.taxes.reduce((s, t) => s + t.taxCents, 0)).toBe(r.taxCents);
+        for (const l of r.lines) if (!l.included || (rateOf.get(l.id) ?? 0) === 0) expect(l.taxCents).toBe(0);
       }),
       { numRuns: 500 },
     );
