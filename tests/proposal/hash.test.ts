@@ -1,6 +1,9 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { matchSignedVersion, normalizeSha256, sha256Hex, verifySha256 } from '@/lib/proposal/hash';
+import { current, newProposal, transition } from '@/lib/proposal/versioning';
+
+const AT = '2026-11-14T12:00:00.000Z';
 
 // CS-02: a signed version's PDF hash never changes, and any byte change fails verify.
 
@@ -112,6 +115,35 @@ describe('CS-02 properties', () => {
         expect(verifySha256(Uint8Array.from([...d, ...extra]), h)).toBe(false);
         expect(verifySha256(Uint8Array.from([...extra, ...d]), h)).toBe(false);
         expect(verifySha256(d.subarray(0, d.length - 1), h)).toBe(false);
+      }),
+      { numRuns: 300 },
+    );
+  });
+
+  it('send and verify accept exactly the same hash spellings, and send stores the form verify compares (D-15)', () => {
+    const spelling = fc.tuple(
+      docArb,
+      fc.constantFrom('', ' ', '\n', '\t '),
+      fc.constantFrom('', ' ', '\r\n'),
+      fc.boolean(),
+      fc.option(fc.nat({ max: 63 }), { nil: undefined }),
+    );
+    fc.assert(
+      fc.property(spelling, ([d, pre, post, upper, cut]) => {
+        let core = sha256Hex(d);
+        if (upper) core = core.toUpperCase();
+        if (cut !== undefined) core = core.slice(0, cut); // malformed: must fail on both sides
+        const input = `${pre}${core}${post}`;
+        const p = newProposal(AT).proposal;
+        let stored: string | null;
+        try {
+          stored = current(transition(p, { type: 'send', pdfSha256: input }, AT).proposal).pdfSha256;
+        } catch (e) {
+          if (!(e instanceof TypeError)) throw e;
+          stored = null;
+        }
+        expect(stored).toBe(normalizeSha256(input));
+        expect(stored !== null).toBe(verifySha256(d, input));
       }),
       { numRuns: 300 },
     );

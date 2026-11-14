@@ -89,6 +89,11 @@ describe('supersede rules', () => {
     expect(() => transition(p, { type: 'send', pdfSha256: 'abc' }, AT)).toThrow(TypeError);
   });
 
+  it('send uses the same normalizer as verify: surrounding whitespace is trimmed, not rejected (D-15)', () => {
+    const p = newProposal(AT).proposal;
+    expect(current(transition(p, { type: 'send', pdfSha256: ` ${H2.toUpperCase()}\n` }, AT).proposal).pdfSha256).toBe(H2);
+  });
+
   it('a rejected event leaves the proposal untouched', () => {
     const p = run('send', 'view', 'sign');
     const before = structuredClone(p);

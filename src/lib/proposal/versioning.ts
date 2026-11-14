@@ -1,5 +1,6 @@
 // Countersign proposal versioning: pure state machine + supersede rules (CS-03, and the pure half of CS-04).
 // Table and rules: docs/countersign/PHASE1_PLAN.md. Nothing here touches the database or the clock: callers pass `at`.
+import { normalizeSha256 } from './sha256-hex';
 
 export type VersionStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired' | 'superseded';
 
@@ -48,7 +49,6 @@ export class TransitionError extends Error {
 
 export const TERMINAL: readonly VersionStatus[] = ['signed', 'superseded'];
 const SUPERSEDABLE: readonly VersionStatus[] = ['sent', 'viewed', 'declined', 'expired'];
-const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 export function newProposal(at: string): TransitionResult {
   const v: Version = { number: 1, status: 'draft', pdfSha256: null, revision: 1 };
@@ -110,8 +110,8 @@ export function transition(p: Proposal, event: ProposalEvent, at: string): Trans
   if (!to) throw new TransitionError(from, event.type);
   let v: Version = { ...cur, status: to };
   if (event.type === 'send') {
-    const hash = event.pdfSha256.toLowerCase();
-    if (!SHA256_HEX.test(hash)) throw new TypeError('send needs the PDF SHA-256 as 64 hex characters');
+    const hash = normalizeSha256(event.pdfSha256);
+    if (!hash) throw new TypeError('send needs the PDF SHA-256 as 64 hex characters');
     v = { ...v, pdfSha256: hash };
   }
   const action: AuditAction = `version.${({ send: 'sent', view: 'viewed', sign: 'signed', decline: 'declined', expire: 'expired' } as const)[event.type]}`;
