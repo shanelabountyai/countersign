@@ -9,8 +9,8 @@ const securityHeaders = [
 ];
 
 const config: NextConfig = {
-  // The generated Prisma client and the pg driver stay on the server.
-  serverExternalPackages: ['@prisma/client', 'pg'],
+  // The generated Prisma client, the pg driver and the PDF renderer (Countersign D-31) stay on the server.
+  serverExternalPackages: ['@prisma/client', 'pg', '@react-pdf/renderer'],
   poweredByHeader: false,
   headers: async () => [
     { source: '/:path*', headers: securityHeaders },
