@@ -8,10 +8,18 @@ import type { OrgCtx } from '@/core/authz/guards';
 import { now } from '@/core/clock';
 import { withOrg, type Tx } from '@/core/db/rls';
 import { Refused } from '@/core/errors';
-import type { DiscountType, LineKind as DbLineKind, ProposalStatus, SectionKind } from '@/generated/prisma/enums';
+import { env } from '@/core/env';
+import { hashToken, newToken } from '@/core/tokens';
+import type { DiscountType, DocumentKind, LineKind as DbLineKind, ProposalStatus, SectionKind } from '@/generated/prisma/enums';
+import { sha256Hex } from './hash';
+import { renderProposalPdf, type ProposalPdfModel } from './pdf';
+import { describeChars, unsupportedChars } from './pdf-text';
 import { renderMerge, unknownFields, type MergeValues } from './merge';
 import { LIMITS, price, PricingError, type Discount, type LineItem, type LineKind, type PricingResult } from './pricing';
 import { current, newProposal, transition, type AuditEvent, type Proposal, type ProposalEvent, type TransitionResult, type Version } from './versioning';
+
+/** Who causes a write: a member (OrgCtx) or, for the client's signing events and the cron, no user (D-38). */
+export type Actor = { orgId: string; userId: string | null };
 
 // ---- input shapes (already parsed from the form: integers, no strings for numbers)
 
@@ -116,7 +124,7 @@ type LineRow = {
   selected: boolean;
 };
 
-const toDiscount = (type: DiscountType | null, value: bigint | null): Discount | null =>
+export const toDiscount = (type: DiscountType | null, value: bigint | null): Discount | null =>
   type === null || value === null ? null : type === 'percent' ? { type: 'percent', bps: Number(value) } : { type: 'fixed', cents: Number(value) };
 
 const fromDiscount = (d: Discount | null) =>
@@ -135,7 +143,7 @@ export function toLineInput(r: LineRow): LineInput {
   };
 }
 
-function toLineItem(id: string, l: LineInput): LineItem {
+export function toLineItem(id: string, l: LineInput): LineItem {
   return {
     id,
     kind: l.kind,
@@ -232,18 +240,18 @@ export async function deleteTemplate(ctx: OrgCtx, id: string) {
 
 const versionInclude = { sections: order, lines: order } as const;
 
-async function lockProposal(tx: Tx, ctx: OrgCtx, id: string) {
+async function lockProposal(tx: Tx, ctx: Actor, id: string) {
   // One writer per proposal at a time: version numbers and the current version are decided under this lock.
   const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Proposal" WHERE id = ${id}::uuid AND "orgId" = ${ctx.orgId}::uuid FOR UPDATE`;
   if (rows.length !== 1) notFound();
 }
 
-async function versionsOf(tx: Tx, ctx: OrgCtx, proposalId: string) {
+export async function versionsOf(tx: Tx, ctx: Actor, proposalId: string) {
   return tx.proposalVersion.findMany({ where: { proposalId, orgId: ctx.orgId }, orderBy: { number: 'asc' }, include: versionInclude });
 }
-type VersionRow = Awaited<ReturnType<typeof versionsOf>>[number];
+export type VersionRow = Awaited<ReturnType<typeof versionsOf>>[number];
 
-const toPure = (rows: readonly Pick<VersionRow, 'number' | 'status' | 'pdfSha256' | 'revision'>[]): Proposal => ({
+export const toPure = (rows: readonly Pick<VersionRow, 'number' | 'status' | 'pdfSha256' | 'revision'>[]): Proposal => ({
   versions: rows.map((r) => ({ number: r.number, status: r.status, pdfSha256: r.pdfSha256, revision: r.revision })),
 });
 
@@ -291,13 +299,17 @@ export async function listProposals(ctx: OrgCtx) {
 
 // ---- proposals: writes
 
-async function writeAudit(tx: Tx, ctx: OrgCtx, proposalId: string, events: readonly AuditEvent[], idOf: (n: number) => string) {
+/** Extra fields on a transition's audit rows: the client metadata of a signing event (D-34). Strings only. */
+export type AuditExtra = Readonly<Record<string, string | null>>;
+
+async function writeAudit(tx: Tx, ctx: Actor, proposalId: string, events: readonly AuditEvent[], idOf: (n: number) => string, hashOf: (n: number) => string | null = () => null, extra: AuditExtra = {}) {
   for (const e of events) {
-    await audit(ctx, `proposal.${e.action}`, { targetType: 'proposalVersion', targetId: idOf(e.version), data: { proposalId, version: e.version, from: e.from, to: e.to, at: e.at } }, tx);
+    const data = { ...extra, proposalId, version: e.version, from: e.from, to: e.to, at: e.at, pdfSha256: hashOf(e.version) };
+    await audit(ctx, `proposal.${e.action}`, { targetType: 'proposalVersion', targetId: idOf(e.version), data }, tx);
   }
 }
 
-async function createVersion(tx: Tx, ctx: OrgCtx, proposalId: string, v: Version, d: DraftInput, at: Date) {
+async function createVersion(tx: Tx, ctx: Actor, proposalId: string, v: Version, d: DraftInput, at: Date) {
   return tx.proposalVersion.create({
     data: {
       orgId: ctx.orgId,
@@ -323,7 +335,7 @@ async function createVersion(tx: Tx, ctx: OrgCtx, proposalId: string, v: Version
  * Writes what transition() decided: status, revision and hash changes on existing versions, a new draft for a
  * supersede, the draft's content for an in-place edit, and one audit row per pure audit event, in order.
  */
-async function persist(tx: Tx, ctx: OrgCtx, proposalId: string, before: readonly VersionRow[], result: TransitionResult, at: Date, content?: DraftInput) {
+async function persist(tx: Tx, ctx: Actor, proposalId: string, before: readonly VersionRow[], result: TransitionResult, at: Date, content?: DraftInput, extra: AuditExtra = {}) {
   const ids = new Map(before.map((r) => [r.number, r.id]));
   for (const v of result.proposal.versions) {
     const old = before.find((r) => r.number === v.number);
@@ -363,7 +375,9 @@ async function persist(tx: Tx, ctx: OrgCtx, proposalId: string, before: readonly
     }
   }
   await tx.proposal.update({ where: { id: proposalId }, data: { updatedAt: at } });
-  await writeAudit(tx, ctx, proposalId, result.audit, (n) => ids.get(n)!);
+  const hashes = new Map(result.proposal.versions.map((v) => [v.number, v.pdfSha256]));
+  await writeAudit(tx, ctx, proposalId, result.audit, (n) => ids.get(n)!, (n) => hashes.get(n) ?? null, extra);
+  return ids;
 }
 
 const frozenAware = async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -431,19 +445,32 @@ export async function saveDraft(ctx: OrgCtx, proposalId: string, expected: { ver
   }));
 }
 
+export type EventOptions = {
+  /** Merged into each audit row this event writes (client metadata, D-34). */
+  auditData?: AuditExtra;
+  /** Runs in the same transaction after the transition is written (the signature and certificate, D-38). */
+  then?: (tx: Tx, done: { result: TransitionResult; versionIds: Map<number, string>; at: Date }) => Promise<void>;
+};
+
+/** applyEvent's body, for callers that already hold a transaction and the proposal lock (send). */
+async function applyInTx(tx: Tx, actor: Actor, proposalId: string, event: Exclude<ProposalEvent, { type: 'edit' }>, opts: EventOptions, at = now()) {
+  const before = await versionsOf(tx, actor, proposalId);
+  const result = transition(toPure(before), event, at.toISOString());
+  const versionIds = await persist(tx, actor, proposalId, before, result, at, undefined, opts.auditData);
+  await opts.then?.(tx, { result, versionIds, at });
+  return result;
+}
+
 /**
  * Applies a non-edit event (send, view, sign, decline, expire) through the pure state machine and persists it. view, sign
  * and decline carry the version and PDF hash the client saw (D-16); a mismatch throws the Phase 1 error and writes nothing.
- * Phase 2 exposes no caller in the UI (D-19); Phase 3's send button and signing page call this.
+ * The actor is a member, or no user for the client's signing events and the cron (D-38). The database refuses a send
+ * without the stored document (D-35): the app sends through sendProposal, which stores it first.
  */
-export async function applyEvent(ctx: OrgCtx, proposalId: string, event: Exclude<ProposalEvent, { type: 'edit' }>) {
-  return frozenAware(() => withOrg(ctx, async (tx) => {
-    await lockProposal(tx, ctx, proposalId);
-    const before = await versionsOf(tx, ctx, proposalId);
-    const at = now();
-    const result = transition(toPure(before), event, at.toISOString());
-    await persist(tx, ctx, proposalId, before, result, at);
-    return result;
+export async function applyEvent(actor: Actor, proposalId: string, event: Exclude<ProposalEvent, { type: 'edit' }>, opts: EventOptions = {}) {
+  return frozenAware(() => withOrg(actor, async (tx) => {
+    await lockProposal(tx, actor, proposalId);
+    return applyInTx(tx, actor, proposalId, event, opts);
   }));
 }
 
@@ -463,4 +490,121 @@ export async function deleteProposal(ctx: OrgCtx, proposalId: string) {
 export async function requireInOrg(ctx: OrgCtx, model: 'proposal' | 'template', id: string) {
   const n = await withOrg(ctx, (tx) => (model === 'proposal' ? tx.proposal.count({ where: { id, orgId: ctx.orgId } }) : tx.template.count({ where: { id, orgId: ctx.orgId } })), { atomic: false });
   if (n !== 1) notFound();
+}
+
+// ---- Phase 3: send (render, store, hash), signing links, stored documents
+
+/** D-36: a signing link is valid for 1–90 days; 30 by default. */
+export const LINK_DAYS = { min: 1, max: 90, default: 30 } as const;
+
+/** The proposal PDF's model from a version's rows (D-31). The client's page and the editor show the same content. */
+export function proposalPdfModel(v: VersionRow, orgName: string): ProposalPdfModel {
+  const values = mergeValues(v);
+  return {
+    orgName,
+    title: v.title,
+    clientName: v.clientName,
+    clientEmail: v.clientEmail,
+    version: v.number,
+    sections: v.sections.map((s) => ({ kind: s.kind, title: renderMerge(s.title, values), body: renderMerge(s.body, values) })),
+    lines: v.lines.map((l) => ({ id: l.id, ...toLineInput(l), quantityMilli: l.kind === 'fixed' ? 1000 : l.quantityMilli })),
+    discount: toDiscount(v.discountType, v.discountValue),
+  };
+}
+
+/** D-31: refuses content the PDF fonts cannot draw, naming the characters. */
+export function assertDrawable(m: ProposalPdfModel) {
+  const all = [m.orgName, m.title, m.clientName, m.clientEmail, ...m.sections.flatMap((s) => [s.title, s.body]), ...m.lines.map((l) => l.description)].join('\n');
+  const bad = unsupportedChars(all);
+  if (bad.length) throw new Refused(`The PDF cannot show these characters yet: ${describeChars(bad)}. Replace them, then send again.`);
+}
+
+const linkDays = (days: number) => {
+  if (!Number.isInteger(days) || days < LINK_DAYS.min || days > LINK_DAYS.max) throw new Refused(`A link is valid for ${LINK_DAYS.min} to ${LINK_DAYS.max} days.`);
+  return days;
+};
+
+async function createLink(tx: Tx, ctx: OrgCtx, versionId: string, days: number, at: Date) {
+  const token = newToken();
+  const link = await tx.signingLink.create({
+    data: { orgId: ctx.orgId, versionId, tokenHash: hashToken(token), createdById: ctx.userId, expiresAt: new Date(at.getTime() + days * 86_400_000) },
+    select: { id: true, expiresAt: true },
+  });
+  await audit(ctx, 'proposal.link.created', { targetType: 'signingLink', targetId: link.id, data: { versionId, days, expiresAt: link.expiresAt.toISOString() } }, tx);
+  return { url: `${env.APP_URL}/sign/${token}`, expiresAt: link.expiresAt }; // the raw token exists only in this response
+}
+
+export type SendResult = { version: number; pdfSha256: string; url: string; expiresAt: Date };
+
+/**
+ * Sends the current draft: renders its PDF, stores the exact bytes, records their SHA-256 with the `send` event (CS-02,
+ * D-16) and creates the signing link (D-29), all in one transaction. `expected` is the draft the owner was looking at
+ * (D-26): a stale page is refused instead of sending content the owner has not seen.
+ */
+export async function sendProposal(ctx: OrgCtx, proposalId: string, expected: { version: number; revision: number }, days: number = LINK_DAYS.default): Promise<SendResult> {
+  assertEditor(ctx);
+  return frozenAware(() => withOrg(ctx, async (tx) => {
+    await lockProposal(tx, ctx, proposalId); // notFound first (INV-04)
+    linkDays(days);
+    const before = await versionsOf(tx, ctx, proposalId);
+    const cur = before.at(-1);
+    if (!cur) notFound();
+    if (cur.status !== 'draft') throw new Refused(`Version ${cur.number} has already been sent.`);
+    if (cur.number !== expected.version || cur.revision !== expected.revision) throw new Refused('This proposal changed since you opened it. Reload, check it, then send.');
+    if (cur.lines.length === 0) throw new Refused('Add at least one line item before sending.');
+    const org = await tx.org.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } });
+    const model = proposalPdfModel(cur, org.name);
+    assertDrawable(model);
+    const at = now();
+    const bytes = await renderProposalPdf(model, at);
+    const pdfSha256 = sha256Hex(bytes);
+    await tx.proposalDocument.create({ data: { orgId: ctx.orgId, versionId: cur.id, kind: 'proposal', sha256: pdfSha256, byteLength: bytes.length, bytes: Buffer.from(bytes) } });
+    await applyInTx(tx, ctx, proposalId, { type: 'send', pdfSha256 }, {}, at);
+    const link = await createLink(tx, ctx, cur.id, days, at);
+    return { version: cur.number, pdfSha256, ...link };
+  }));
+}
+
+/** D-36: replaces the current version's signing link (a lost URL). The old link is revoked; the new URL is shown once. */
+export async function newSigningLink(ctx: OrgCtx, proposalId: string, days: number = LINK_DAYS.default) {
+  assertEditor(ctx);
+  return frozenAware(() => withOrg(ctx, async (tx) => {
+    await lockProposal(tx, ctx, proposalId);
+    linkDays(days);
+    const cur = (await versionsOf(tx, ctx, proposalId)).at(-1);
+    if (!cur) notFound();
+    if (cur.status !== 'sent' && cur.status !== 'viewed') throw new Refused(`Version ${cur.number} is ${cur.status}; only a sent proposal awaiting signature gets a new link.`);
+    const at = now();
+    const live = await tx.signingLink.findMany({ where: { versionId: cur.id, orgId: ctx.orgId, revokedAt: null }, select: { id: true } });
+    for (const l of live) {
+      await tx.signingLink.update({ where: { id: l.id }, data: { revokedAt: at } });
+      await audit(ctx, 'proposal.link.revoked', { targetType: 'signingLink', targetId: l.id, data: { versionId: cur.id } }, tx);
+    }
+    return createLink(tx, ctx, cur.id, days, at);
+  }));
+}
+
+/** What the editor shows about sending and signing: stored documents, links and the signature, per version number. */
+export async function signingRecord(ctx: OrgCtx, proposalId: string) {
+  return withOrg(ctx, async (tx) => {
+    const rows = await tx.proposalVersion.findMany({
+      where: { proposalId, orgId: ctx.orgId },
+      orderBy: { number: 'asc' },
+      select: {
+        number: true,
+        documents: { select: { id: true, kind: true, sha256: true, byteLength: true, createdAt: true }, orderBy: { kind: 'asc' } },
+        signingLinks: { select: { id: true, expiresAt: true, revokedAt: true, createdAt: true }, orderBy: { createdAt: 'desc' } },
+        signature: { select: { signerName: true, method: true, signedAt: true, totalCents: true, selectedLineIds: true } },
+      },
+    });
+    return new Map(rows.map((r) => [r.number, r]));
+  }, { atomic: false });
+}
+
+/** A stored PDF of one of this org's proposals (owner download). notFound for anything else. */
+export async function getDocument(ctx: OrgCtx, proposalId: string, versionNumber: number, kind: DocumentKind) {
+  const d = await withOrg(ctx, (tx) =>
+    tx.proposalDocument.findFirst({ where: { orgId: ctx.orgId, kind, version: { proposalId, number: versionNumber, orgId: ctx.orgId } }, select: { bytes: true, sha256: true, version: { select: { title: true, number: true } } } }), { atomic: false });
+  if (!d) notFound();
+  return d;
 }
