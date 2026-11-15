@@ -9,14 +9,21 @@ import {
 } from '@/lib/proposal/store';
 import { HashMismatchError, linkAccess, transition, VersionMismatchError, type AuditEvent, type Proposal, type ProposalEvent, newProposal } from '@/lib/proposal/versioning';
 import { resetAuthTables } from '../helpers/auth';
+import { storeTestPdf, testHash } from '../helpers/countersign';
 import { NavSignal } from '../helpers/next';
 import { actAs, addMember, makeOrg } from '../helpers/org';
 
 // Phase 2 store over Postgres: CS-01 (totals), CS-03 (supersede), CS-04 (one audit row per transition), CS-05 (org half),
 // D-16 binding persisted, D-20 copy-on-create, D-26 stale saves, D-28 delete rules.
 
-const H1 = 'a'.repeat(64);
-const H2 = 'b'.repeat(64);
+const H1 = testHash('1');
+const H2 = testHash('2');
+const TAG: Record<string, string> = { [H1]: '1', [H2]: '2' };
+/** D-35: a send needs the stored document first (Phase 3). */
+async function send(id: string, hash = H1) {
+  await storeTestPdf(id, TAG[hash]!);
+  return applyEvent(ctx, id, { type: 'send', pdfSha256: hash });
+}
 
 const line = (over: Partial<LineInput> = {}): LineInput => ({
   kind: 'fixed', description: 'Work', unitPriceCents: 10_000, quantityMilli: 1000, taxRateBps: 0, discount: null, optional: false, selected: false, ...over,
@@ -52,7 +59,7 @@ async function newDraft(d: DraftInput = draft()) {
 }
 
 async function sendAndView(id: string, version = 1, hash = H1) {
-  await applyEvent(ctx, id, { type: 'send', pdfSha256: hash });
+  await send(id, hash);
   await applyEvent(ctx, id, { type: 'view', version, pdfSha256: hash });
 }
 
@@ -172,7 +179,7 @@ describe('events persisted (D-16, CS-03, CS-04)', () => {
 
   it.each(['sent', 'viewed', 'declined', 'expired'] as const)('CS-03: an edit to a %s version supersedes it; the old link is 410', async (status) => {
     const id = await newDraft();
-    await applyEvent(ctx, id, { type: 'send', pdfSha256: H1 });
+    await send(id);
     if (status !== 'sent') await applyEvent(ctx, id, { type: 'view', version: 1, pdfSha256: H1 });
     if (status === 'declined') await applyEvent(ctx, id, { type: 'decline', version: 1, pdfSha256: H1 });
     if (status === 'expired') await applyEvent(ctx, id, { type: 'expire' });
@@ -239,6 +246,7 @@ describe('events persisted (D-16, CS-03, CS-04)', () => {
             r = null;
           }
           const cur = pure.versions.at(-1)!;
+          if (r && e.type === 'send') await storeTestPdf(id, TAG[e.pdfSha256]!); // D-35: only for a send that will succeed
           const call = e.type === 'edit' ? saveDraft(ctx, id, { version: cur.number, revision: cur.revision }, draft()) : applyEvent(ctx, id, e);
           if (r) {
             await call;

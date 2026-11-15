@@ -27,6 +27,26 @@ export const exportTables: readonly ExportTable[] = [
   },
   { name: 'ProposalSection', rows: (tx, orgId) => tx.proposalSection.findMany({ where: { orgId }, select: { id: true, versionId: true, position: true, kind: true, title: true, body: true } }) },
   { name: 'ProposalLine', rows: (tx, orgId) => tx.proposalLine.findMany({ where: { orgId }, select: lineColumns(false) }) },
+  // Phase 3: the stored PDFs (bytes as base64, so the export holds the exact signed documents), signing links without their
+  // token hash (INV-34), and signatures.
+  {
+    name: 'ProposalDocument',
+    rows: async (tx, orgId) =>
+      (await tx.proposalDocument.findMany({ where: { orgId }, select: { id: true, versionId: true, kind: true, sha256: true, byteLength: true, bytes: true, createdAt: true } }))
+        .map(({ bytes, ...d }) => ({ ...d, bytesBase64: Buffer.from(bytes).toString('base64') })),
+  },
+  { name: 'SigningLink', rows: (tx, orgId) => tx.signingLink.findMany({ where: { orgId }, select: { id: true, versionId: true, createdById: true, expiresAt: true, revokedAt: true, createdAt: true } }) },
+  {
+    name: 'ProposalSignature',
+    rows: (tx, orgId) =>
+      tx.proposalSignature.findMany({
+        where: { orgId },
+        select: {
+          id: true, versionId: true, signerName: true, method: true, signatureData: true, consentVersion: true, consentText: true, pdfSha256: true, selectedLineIds: true,
+          subtotalCents: true, discountCents: true, taxCents: true, totalCents: true, ipHash: true, userAgent: true, signedAt: true,
+        },
+      }),
+  },
 ];
 
 // An org-owned table left out on purpose, with the reason. INV-34 fails on any model with an orgId column that is in
