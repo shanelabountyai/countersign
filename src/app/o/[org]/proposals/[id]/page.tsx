@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { requireOrg } from '@/core/authz/guards';
 import { ActionForm } from '@/core/ui/action-form';
 import { displayCents, formatMoney, formatPercent } from '@/lib/proposal/money';
-import { getProposal } from '@/lib/proposal/store';
-import { removeProposal, saveProposal } from '../actions';
+import { getProposal, LINK_DAYS, signingRecord } from '@/lib/proposal/store';
+import { newLinkAction, removeProposal, saveProposal, sendProposalAction } from '../actions';
 import { LineRows, SectionRows } from '../editor-fields';
 
 export const metadata = { title: 'Edit proposal' };
@@ -20,7 +20,14 @@ export default async function ProposalEditor({ params, searchParams }: { params:
   const { id } = await params;
   const { superseded } = await searchParams;
   const p = await getProposal(ctx, id);
+  const record = await signingRecord(ctx, id);
   const v = p.current;
+  const cur = record.get(v.number);
+  const liveLink = cur?.signingLinks.find((l) => !l.revokedAt);
+  const pdfHref = (n: number, kind: 'proposal' | 'certificate') => `/o/${ctx.slug}/proposals/${id}/pdf?v=${n}&kind=${kind}`;
+  const daysField = (
+    <label>Link valid for <input name="days" defaultValue={String(LINK_DAYS.default)} size={3} inputMode="numeric" required /> days</label>
+  );
   const editable = ctx.role !== 'scorekeeper' && v.status !== 'signed';
   const neverSent = p.versions.every((x) => x.status === 'draft');
   const byId = new Map(v.pricing.lines.map((l) => [l.id, l]));
@@ -35,6 +42,47 @@ export default async function ProposalEditor({ params, searchParams }: { params:
         <p role="note">Version {v.number} {STATUS_NOTE[v.status]} and is frozen. Saving creates version {v.number + 1} as a new draft.</p>
       )}
       {v.status === 'signed' && <p role="note">Version {v.number} is signed. It is frozen and cannot be edited.</p>}
+
+      {editable && v.status === 'draft' && (
+        <>
+          <h2>Send</h2>
+          <p>Sending renders this draft as a PDF, records its SHA-256 and freezes version {v.number}. You get a signing link to give the client (no email is sent).</p>
+          <ActionForm action={sendProposalAction.bind(null, ctx.slug)}>
+            <input type="hidden" name="id" value={id} />
+            <input type="hidden" name="expectedVersion" value={String(v.number)} />
+            <input type="hidden" name="expectedRevision" value={String(v.revision)} />
+            {daysField}{' '}
+            <button type="submit">Send version {v.number}</button>
+          </ActionForm>
+        </>
+      )}
+      {(v.status === 'sent' || v.status === 'viewed') && (
+        <>
+          <h2>Signing link</h2>
+          <p>
+            {liveLink ? <>The client&apos;s link is valid until {liveLink.expiresAt.toISOString().slice(0, 16).replace('T', ' ')} UTC.</> : <>No live link.</>}{' '}
+            {v.status === 'viewed' ? 'The client has opened the proposal.' : 'The client has not opened it yet.'}
+          </p>
+          {editable && (
+            <ActionForm action={newLinkAction.bind(null, ctx.slug)}>
+              <input type="hidden" name="id" value={id} />
+              {daysField}{' '}
+              <button type="submit">Replace the link</button>
+            </ActionForm>
+          )}
+        </>
+      )}
+      {cur?.signature && (
+        <>
+          <h2>Signature</h2>
+          <p>
+            Signed by {cur.signature.signerName} ({cur.signature.method}) on {cur.signature.signedAt.toISOString().slice(0, 16).replace('T', ' ')} UTC for{' '}
+            <strong>{displayCents(Number(cur.signature.totalCents))}</strong>
+            {cur.signature.selectedLineIds.length > 0 && <> with {cur.signature.selectedLineIds.length} add-on(s)</>}.{' '}
+            <a href={pdfHref(v.number, 'certificate')}>Completion certificate (PDF)</a>
+          </p>
+        </>
+      )}
 
       <h2>Price</h2>
       <table>
@@ -107,7 +155,8 @@ export default async function ProposalEditor({ params, searchParams }: { params:
         {p.versions.map((x) => (
           <li key={x.id}>
             v{x.number}: {x.status} since {x.statusAt.toISOString().slice(0, 16).replace('T', ' ')} UTC
-            {x.pdfSha256 && <> · PDF sha256 <code>{x.pdfSha256.slice(0, 12)}…</code></>}
+            {x.pdfSha256 && <> · <a href={pdfHref(x.number, 'proposal')}>PDF</a> sha256 <code>{x.pdfSha256}</code></>}
+            {record.get(x.number)?.documents.some((d) => d.kind === 'certificate') && <> · <a href={pdfHref(x.number, 'certificate')}>certificate</a></>}
           </li>
         ))}
       </ol>

@@ -1,5 +1,6 @@
 // Countersign signature, consent and client metadata (D-34, D-37). Pure: no database, no env; the HMAC key is passed in.
 import { createHmac, hkdfSync } from 'node:crypto';
+import { SIGNATURE_LIMITS } from './signature-limits';
 
 export class SignatureError extends Error {
   override name = 'SignatureError';
@@ -18,7 +19,7 @@ export function consentText(p: { title: string; version: number; pdfSha256: stri
 export type SignatureMethod = 'typed' | 'drawn';
 export type SignatureInput = { signerName: string; method: SignatureMethod; data: string };
 
-export const SIGNATURE_LIMITS = { name: 120, path: 20_000, width: 600, height: 200 } as const;
+export { SIGNATURE_LIMITS };
 
 // Drawn: one or more strokes "M x y L x y …" with integer coordinates inside the 600×200 pad, single spaces only.
 const POINT = '(?:600|[1-5]?\\d{1,2}) (?:200|1?\\d{1,2})';

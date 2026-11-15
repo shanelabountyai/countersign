@@ -138,6 +138,10 @@ describe('the link (CS-03)', () => {
     await expect(signLink(r.token, META, signPost(r))).rejects.toEqual(refusal(410, 'gone'));
     await expect(declineLink(r.token, META, { ...posted(r), reason: '' })).rejects.toEqual(refusal(410, 'gone'));
     await expect(linkDocument(r.token, META, 'proposal')).rejects.toEqual(refusal(410, 'gone'));
+    // a gone link answers 410 before the form is even checked: an invalid sign or decline is still 410, not 400
+    await expect(signLink(r.token, META, signPost(r, { consent: false, signerName: '' }))).rejects.toEqual(refusal(410, 'gone'));
+    await expect(declineLink(r.token, META, { ...posted(r), reason: 'x'.repeat(5000) })).rejects.toEqual(refusal(410, 'gone'));
+    await expect(signLink(r.token, META, signPost(r))).rejects.toMatchObject({ reason: 'superseded' });
     expect(await snapshot()).toBe(before);
   });
 

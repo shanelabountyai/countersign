@@ -27,6 +27,8 @@ export class ClientRefusal extends Error {
     readonly status: 400 | 404 | 409 | 410 | 429,
     readonly code: RefusalCode,
     message: string = code,
+    /** For a 410: why the link is gone, so the page can say so. */
+    readonly reason?: GoneReason,
   ) {
     super(message);
   }
@@ -118,7 +120,7 @@ export async function linkDocument(token: string, meta: ClientMeta, kind: 'propo
     if (!l) throw new ClientRefusal(404, 'not_found');
     const a = accessOf(l, now());
     if (a.code === 404) throw new ClientRefusal(404, 'not_found');
-    if (a.code === 410) throw new ClientRefusal(410, 'gone');
+    if (a.code === 410) throw new ClientRefusal(410, 'gone', 'gone', a.reason);
     if (kind === 'certificate' && a.state !== 'completed') throw new ClientRefusal(404, 'not_found');
     const d = await tx.proposalDocument.findUnique({ where: { versionId_kind: { versionId: l.version.id, kind } }, select: { bytes: true, sha256: true } });
     if (!d) throw new ClientRefusal(404, 'not_found');
@@ -138,10 +140,13 @@ function clientAudit(link: LinkRow, meta: ClientMeta, more: AuditExtra = {}): Au
  * Runs one client event: the link must resolve and be live, before and again inside the transaction (a link revoked or
  * expired in between refuses it). Pure-machine refusals (stale version, other hash, wrong status) become 409 "stale".
  */
-async function clientEvent(token: string, meta: ClientMeta, type: 'view' | 'sign' | 'decline', posted: Posted, more: AuditExtra, then?: (tx: Tx, l: Loaded, at: Date) => Promise<void>) {
+async function clientEvent(token: string, meta: ClientMeta, type: 'view' | 'sign' | 'decline', posted: Posted, check: () => AuditExtra, then?: (tx: Tx, l: Loaded, at: Date) => Promise<void>) {
   await limit(meta);
   const link = await findLink(token);
   if (!link) throw new ClientRefusal(404, 'not_found');
+  const gate = await view(token); // gone before anything is checked: a dead link answers 410 whatever was posted (CS-03)
+  if (gate.code === 410) throw new ClientRefusal(410, 'gone', 'gone', gate.reason);
+  const more = check(); // the form's own checks (consent, signature, reason) come after the link is known to be live
   if (!Number.isSafeInteger(posted.version) || !normalizeSha256(posted.pdfSha256)) throw new ClientRefusal(409, 'stale');
   const actor: Actor = { orgId: link.orgId, userId: null };
   try {
@@ -149,7 +154,7 @@ async function clientEvent(token: string, meta: ClientMeta, type: 'view' | 'sign
       auditData: clientAudit(link, meta, more),
       then: async (tx, { at }) => {
         const fresh = await tx.signingLink.findUnique({ where: { id: link.id }, select: { revokedAt: true, expiresAt: true } });
-        if (!fresh || fresh.revokedAt || fresh.expiresAt.getTime() <= at.getTime()) throw new ClientRefusal(410, 'gone');
+        if (!fresh || fresh.revokedAt || fresh.expiresAt.getTime() <= at.getTime()) throw new ClientRefusal(410, 'gone', 'gone', fresh?.revokedAt ? 'revoked' : 'expired');
         if (posted.version !== link.versionNumber) throw new ClientRefusal(409, 'stale'); // the link is bound to its version
         if (then) {
           const l = await load(tx, { ...link, ...fresh });
@@ -162,7 +167,7 @@ async function clientEvent(token: string, meta: ClientMeta, type: 'view' | 'sign
     if (e instanceof TransitionError) {
       // The version moved on (superseded, expired, declined): the link is gone; otherwise the page was stale.
       const v = await view(token).catch(() => null);
-      throw v && v.code === 410 ? new ClientRefusal(410, 'gone') : new ClientRefusal(409, 'stale');
+      throw v && v.code === 410 ? new ClientRefusal(410, 'gone', 'gone', v.reason) : new ClientRefusal(409, 'stale');
     }
     if (e instanceof Refused && !(e instanceof ClientRefusal)) throw new ClientRefusal(409, 'stale', e.message); // FrozenError
     throw e;
@@ -171,22 +176,25 @@ async function clientEvent(token: string, meta: ClientMeta, type: 'view' | 'sign
 
 /** "Open proposal": records the view (D-33), the precondition for signing or declining (D-12). */
 export async function recordView(token: string, meta: ClientMeta, posted: Posted) {
-  await clientEvent(token, meta, 'view', posted, {});
+  await clientEvent(token, meta, 'view', posted, () => ({}));
 }
 
 export type SignPost = Posted & { signerName: string; method: SignatureMethod; signatureData: string; consent: boolean; selected: string[] };
 
 /** Signs the version the page showed, with the chosen add-ons; stores the signature and the certificate atomically. */
 export async function signLink(token: string, meta: ClientMeta, posted: SignPost) {
-  if (!posted.consent) throw new ClientRefusal(400, 'consent', 'Tick the box to agree to sign electronically.');
-  let sig;
-  try {
-    sig = checkSignature({ signerName: posted.signerName, method: posted.method, data: posted.signatureData });
-  } catch (e) {
-    if (e instanceof SignatureError) throw new ClientRefusal(400, 'signature', e.message);
-    throw e;
-  }
-  await clientEvent(token, meta, 'sign', posted, { signerName: sig.signerName, method: sig.method }, async (tx, l, at) => {
+  let sig: ReturnType<typeof checkSignature>;
+  const check = () => {
+    if (!posted.consent) throw new ClientRefusal(400, 'consent', 'Tick the box to agree to sign electronically.');
+    try {
+      sig = checkSignature({ signerName: posted.signerName, method: posted.method, data: posted.signatureData });
+    } catch (e) {
+      if (e instanceof SignatureError) throw new ClientRefusal(400, 'signature', e.message);
+      throw e;
+    }
+    return { signerName: sig.signerName, method: sig.method };
+  };
+  await clientEvent(token, meta, 'sign', posted, check, async (tx, l, at) => {
     const v = l.version;
     const discount = toDiscount(v.discountType, v.discountValue);
     let priced;
@@ -231,9 +239,11 @@ export const DECLINE_REASON_MAX = 1000;
 
 /** Declines the version the page showed, with an optional reason (kept in the audit row). */
 export async function declineLink(token: string, meta: ClientMeta, posted: Posted & { reason: string }) {
-  const reason = posted.reason.trim();
-  if (reason.length > DECLINE_REASON_MAX) throw new ClientRefusal(400, 'reason', `Keep the reason under ${DECLINE_REASON_MAX} characters.`);
-  await clientEvent(token, meta, 'decline', posted, { reason });
+  await clientEvent(token, meta, 'decline', posted, () => {
+    const reason = posted.reason.trim();
+    if (reason.length > DECLINE_REASON_MAX) throw new ClientRefusal(400, 'reason', `Keep the reason under ${DECLINE_REASON_MAX} characters.`);
+    return { reason };
+  });
 }
 
 /** The daily cron (D-36): `expire` on every sent/viewed version whose links have all lapsed. System actor, one audit row each. */

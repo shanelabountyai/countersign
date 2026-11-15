@@ -6,10 +6,10 @@ import { orgAction, ref } from '@/core/authz/action';
 import { Refused } from '@/core/errors';
 import { parseDiscount, parseLines, parseSections } from '@/lib/proposal/form';
 import { InputError } from '@/lib/proposal/money';
-import { createProposal, deleteProposal, requireInOrg, saveDraft } from '@/lib/proposal/store';
+import { createProposal, deleteProposal, LINK_DAYS, newSigningLink, requireInOrg, saveDraft, sendProposal } from '@/lib/proposal/store';
 import { lineColumns, sectionColumns } from './form-schema';
 
-// The proposal editor (Phase 2). No send here (D-19): Phase 3 adds it with the PDF and its hash.
+// The proposal editor (Phase 2) and, from Phase 3, send (PDF rendered, stored and hashed) and a new signing link.
 
 const page = (slug: string, id: string) => `/o/${slug}/proposals/${id}`;
 const short = z.string().max(2000);
@@ -69,4 +69,25 @@ export const saveProposal = orgAction(
 export const removeProposal = orgAction(null, z.object({ id: ref('proposal') }), async (ctx, i) => {
   await deleteProposal(ctx, i.id);
   redirect(`/o/${ctx.slug}/proposals`);
+});
+
+const days = (raw: string) => {
+  if (!/^\d{1,3}$/.test(raw.trim())) throw new Refused(`Enter the link validity in days (${LINK_DAYS.min}–${LINK_DAYS.max}).`);
+  return Number(raw.trim());
+};
+const until = (d: Date) => `${d.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+
+export const sendProposalAction = orgAction(null, z.object({ id: ref('proposal'), expectedVersion: short, expectedRevision: short, days: short }), async (ctx, i) => {
+  await requireInOrg(ctx, 'proposal', i.id);
+  if (!/^\d{1,9}$/.test(i.expectedVersion) || !/^\d{1,9}$/.test(i.expectedRevision)) throw new Refused('This form is out of date. Reload the page.');
+  const r = await sendProposal(ctx, i.id, { version: Number(i.expectedVersion), revision: Number(i.expectedRevision) }, days(i.days));
+  // No revalidatePath: re-rendering would remove this form (the version is no longer a draft) and its one-time notice with it.
+  return { notice: `Version ${r.version} sent. Signing link, shown once (copy it now), valid until ${until(r.expiresAt)}: ${r.url} Reload the page to see the new status.` };
+});
+
+export const newLinkAction = orgAction(null, z.object({ id: ref('proposal'), days: short }), async (ctx, i) => {
+  await requireInOrg(ctx, 'proposal', i.id);
+  const r = await newSigningLink(ctx, i.id, days(i.days));
+  revalidatePath(page(ctx.slug, i.id));
+  return { notice: `New signing link, shown once (copy it now), valid until ${until(r.expiresAt)}. The previous link no longer works: ${r.url}` };
 });

@@ -24,6 +24,15 @@ const config: NextConfig = {
         { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
       ],
     },
+    // Countersign signing pages (D-29): the same rules for the signing token in /sign/<token>.
+    {
+      source: '/sign/:path*',
+      headers: [
+        { key: 'Referrer-Policy', value: 'no-referrer' },
+        { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+        { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
+      ],
+    },
   ],
 };
 
