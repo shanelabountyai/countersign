@@ -1,6 +1,64 @@
-# countersign
+# Countersign
 
-> Cloned from saas-foundation v1.6.2. Port 8300. Upgrade with `npm run foundation:status`; template-owned paths are listed in the template's plan §3.2.
+Proposal builder with an e-sign audit trail (build log #30). Port 8300. Cloned from saas-foundation v1.6.2.
+
+> **Not a legally vetted e-signature product, and not legal advice.** Countersign is a demonstration of how a signing
+> record can be made tamper-evident. Signing runs on a mocked provider (D-01); nothing here has been reviewed for
+> ESIGN, UETA, eIDAS or any other law, and whether a signature made with it is enforceable is a question for a lawyer.
+
+## What it does
+
+- **Templates** with sections, terms and the merge fields `{{client}}`, `{{scope}}`, `{{timeline}}`; reusable line items
+  (fixed, hourly, per unit, optional add-ons). A one-click **Lab Intelligence sample template** (labelled SAMPLE, every
+  price a $0.00 placeholder, no client named) shows a full proposal layout.
+- **Proposals** move draft → sent → viewed → signed / declined / expired. Any edit after sending creates a new version and
+  turns the old signing link into an HTTP 410.
+- **Pricing** in integer cents: line and proposal discounts, tax rounded once per rate, add-ons the client toggles before
+  signing. Totals do not depend on line order.
+- **PDF**: rendered deterministically at send; the SHA-256 of the exact bytes is stored with the version, and the database
+  refuses to change a sent version, its lines or its stored PDF.
+- **Signing**: the client opens a link, reviews, types or draws a signature and ticks the e-records consent. Each event is
+  audited with time, a keyed hash of the IP, the user agent and the document hash, and a completion certificate PDF lists
+  the whole trail.
+- **Verify** (`/verify`, public): upload a proposal PDF or a certificate. The page hashes the exact bytes, finds the signed
+  version with that hash, and says **Verified** only after re-deriving the record from stored data: the stored bytes,
+  recorded hashes and audit trail agree, the version is signed, the proposal PDF and the certificate re-render to the
+  identical bytes, and the agreed price re-computes. Anything else is **Not verified**.
+
+Design decisions: `docs/countersign/DECISIONS.md` (D-01 onward). Scope: `docs/countersign/PRD.md`. Phase plans:
+`docs/countersign/PHASE1_PLAN.md` to `PHASE4_PLAN.md`.
+
+## Case study: proving a signed PDF has not changed
+
+The question a signing tool has to answer later is "is this the document that was signed?" Countersign answers it with
+one rule (CS-02): a signed version's PDF hash never changes, and any changed byte fails verification. Phases 1 to 3 built
+the pieces (a pure hash module, deterministic PDFs, triggers that freeze a sent version, the audit trail and the
+certificate); Phase 4 put a page in front of them that anyone can use without an account.
+
+Two choices made the verify page more than a hash lookup:
+
+1. **Re-derive, do not just read back.** A stored hash only proves the stored bytes match the stored hash. The verify page
+   also re-renders the proposal PDF from the version's frozen rows and the certificate from the stored signature and audit
+   trail, and compares bytes. That catches a record edited at rest even when the edit leaves the uploaded file's hash in
+   place: in the integration tests, changing a stored signature total, a frozen line, the signer's name, the certificate
+   bytes, an audit row, or the org's name all turn a verified PDF into "the stored record is inconsistent".
+2. **Unsigned never verifies.** A sent, replaced, declined or expired version keeps its hash, but the page reports it as
+   "never signed" rather than as a match (D-17).
+
+Numbers from the Phase 4 run (2026-11-16), each produced by a command run in that session:
+
+| Measure | Result | Command |
+|---|---|---|
+| Single-byte flips of a rendered PDF that still verified | **0 of 5,930** (the sample-template proposal PDF is 5,930 bytes; every position flipped once, plus one byte appended and one removed) | `npx vitest run tests/proposal/verify.test.ts` |
+| Re-derivation checks behind a "Verified" | 8, all passing for a real send → view → sign | `npx vitest run tests/integration/countersign-verify.test.ts` (18 tests) |
+| Unit, property, integration and invariant tests | 672 passed, 30 skipped, 58 files | `npm test` |
+| End-to-end tests against the production build | 18 passed, including upload of the signed PDF, its certificate, a one-byte-tampered copy and an unsigned PDF on `/verify` | `npm run test:e2e` |
+
+What it does not prove: who was at the keyboard (the trail records a hashed IP and a user agent, not an identity), or
+anything about a PDF that was never stored by this instance. Renaming the org after signing makes re-derivation fail
+(D-41): the check reports it rather than hiding it.
+
+## Foundation
 
 A Next.js 16 + Prisma 7 + Postgres template with the parts every multi-tenant app rebuilds: magic-link sign-in with TOTP,
 orgs and roles, one authorization path, an append-only audit log, share links, cron, and optional billing (Stripe) and
