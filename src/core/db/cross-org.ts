@@ -18,4 +18,5 @@ export const CROSS_ORG_FILES: Readonly<Record<string, string>> = {
   'src/modules/apikeys/webhooks.ts': 'webhook fan-out and delivery: the cron sweep crosses every org', // apikeys
   // clone entries below
   'src/lib/proposal/signing-link.ts': 'Countersign: a signing link names its org, so the token lookup runs before the org is known; the expiry cron crosses every org (D-29, D-36)', // app
+  'src/lib/proposal/verify-lookup.ts': 'Countersign: the public verify page looks an uploaded PDF up by its SHA-256 before any org is known (D-40)', // app
 };

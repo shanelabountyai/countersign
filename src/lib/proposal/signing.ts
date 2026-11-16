@@ -9,11 +9,12 @@ import { env } from '@/core/env';
 import { Refused } from '@/core/errors';
 import { hit, LIMITS } from '@/core/rate-limit';
 import { normalizeSha256, sha256Hex } from './hash';
-import { renderCertificatePdf, type TrailRow } from './pdf';
-import { priceSelection, SelectionError } from './selection';
+import { certificateModel, priceVersionSelection, trailOf } from './certificate';
+import { renderCertificatePdf } from './pdf';
+import { SelectionError } from './selection';
 import { CONSENT_VERSION, checkSignature, cleanUserAgent, consentText, ipHash, ipHashKey, SignatureError, type SignatureMethod } from './signature';
 import { findLink, lapsedVersions, type LinkRow } from './signing-link';
-import { applyEvent, presentVersion, toDiscount, toLineItem, toLineInput, toPure, versionsOf, type Actor, type AuditExtra, type VersionRow } from './store';
+import { applyEvent, presentVersion, toPure, versionsOf, type Actor, type AuditExtra, type VersionRow } from './store';
 import { linkAccess, TransitionError } from './versioning';
 
 export type ClientMeta = { ip: string; userAgent: string | null };
@@ -196,10 +197,9 @@ export async function signLink(token: string, meta: ClientMeta, posted: SignPost
   };
   await clientEvent(token, meta, 'sign', posted, check, async (tx, l, at) => {
     const v = l.version;
-    const discount = toDiscount(v.discountType, v.discountValue);
     let priced;
     try {
-      priced = priceSelection({ lines: v.lines.map((r) => toLineItem(r.id, toLineInput(r))), ...(discount ? { discount } : {}) }, posted.selected);
+      priced = priceVersionSelection(v, posted.selected);
     } catch (e) {
       if (e instanceof SelectionError) throw new ClientRefusal(400, 'selection', 'One of the chosen add-ons is not part of this proposal. Reload the page.');
       throw e;
@@ -218,17 +218,11 @@ export async function signLink(token: string, meta: ClientMeta, posted: SignPost
     });
     const doc = await tx.proposalDocument.findUniqueOrThrow({ where: { versionId_kind: { versionId: v.id, kind: 'proposal' } }, select: { byteLength: true } });
     const events = await tx.auditEvent.findMany({ where: { orgId: l.link.orgId, targetType: 'proposalVersion', targetId: v.id }, orderBy: { id: 'asc' } });
-    const trail: TrailRow[] = events.map((e) => {
-      const d = (e.data ?? {}) as Record<string, string | null | undefined>;
-      return { at: d.at ?? e.at.toISOString(), action: e.action, from: d.from ?? null, to: d.to ?? '', pdfSha256: d.pdfSha256 ?? null, ipHash: d.ipHash ?? null, userAgent: d.userAgent ?? null };
-    });
     const bytes = await renderCertificatePdf(
-      {
-        orgName: l.orgName, title: v.title, clientName: v.clientName, version: v.number, proposalId: v.proposalId, versionId: v.id, pdfSha256, pdfBytes: doc.byteLength,
-        signedAt: at.toISOString(), signer: { name: sig.signerName, method: sig.method, data: sig.data }, consent,
-        addOns: v.lines.filter((r) => r.optional).map((r) => ({ description: r.description, chosen: chosen.has(r.id) })),
-        pricing: priced, trail,
-      },
+      certificateModel({
+        orgName: l.orgName, version: v, pdfSha256, pdfBytes: doc.byteLength, signedAt: at,
+        signer: { name: sig.signerName, method: sig.method, data: sig.data }, consent, chosen, pricing: priced, trail: trailOf(events),
+      }),
       at,
     );
     await tx.proposalDocument.create({ data: { orgId: l.link.orgId, versionId: v.id, kind: 'certificate', sha256: sha256Hex(bytes), byteLength: bytes.length, bytes: Buffer.from(bytes) } });

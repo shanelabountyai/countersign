@@ -81,6 +81,7 @@ export default async function ProposalEditor({ params, searchParams }: { params:
             {cur.signature.selectedLineIds.length > 0 && <> with {cur.signature.selectedLineIds.length} add-on(s)</>}.{' '}
             <a href={pdfHref(v.number, 'certificate')}>Completion certificate (PDF)</a>
           </p>
+          <p>Anyone holding a copy of the proposal PDF or the certificate can check it at <a href="/verify">/verify</a>.</p>
         </>
       )}
 

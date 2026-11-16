@@ -180,6 +180,7 @@ model ProposalDocument {
 
   @@unique([versionId, kind])
   @@index([orgId])
+  @@index([sha256]) // the public verify page looks an upload up by its hash across orgs (Phase 4, D-40)
 }
 
 /// A client's signing link for one version (D-29). Only the token's sha256 is stored (INV-07). Only `revokedAt` can
