@@ -2,8 +2,8 @@ import { execSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 import pg from 'pg';
 
-// Countersign Phase 2 editor against the production build: a template with merge fields and a taxed line, a proposal
-// created from it, an in-place draft save, and (after a send recorded in the database, D-19) a save that supersedes.
+// Countersign editor against the production build: a template with merge fields and a taxed line, a proposal created
+// from it, an in-place draft save, a send from the editor (Phase 3: the PDF is stored and hashed), and a save that supersedes.
 const db = new pg.Pool({ connectionString: process.env.DATABASE_URL_SYSTEM ?? process.env.DATABASE_URL, max: 1 });
 test.afterAll(() => db.end());
 test.beforeAll(async () => {
@@ -43,14 +43,16 @@ test('template → proposal → draft save → supersede after send', async ({ p
   await page.reload();
   await expect(page.getByText('We build a new site for Acme Co.')).toBeVisible();
 
-  // Phase 3 will send from the UI; here the send is recorded directly (the trigger requires a canonical hash).
   const id = page.url().split('/').pop()!;
-  await db.query(`UPDATE "ProposalVersion" SET status = 'sent', "statusAt" = now(), "pdfSha256" = $2 WHERE "proposalId" = $1 AND number = 1`, [id, 'e'.repeat(64)]);
+  await page.getByRole('button', { name: 'Send version 1' }).click();
+  await expect(page.getByRole('status')).toContainText('/sign/');
+  const { rows } = await db.query<{ pdfSha256: string }>(`SELECT "pdfSha256" FROM "ProposalVersion" WHERE "proposalId" = $1 AND number = 1 AND status = 'sent'`, [id]);
+  expect(rows[0]!.pdfSha256).toMatch(/^[0-9a-f]{64}$/);
   await page.reload();
   await expect(page.getByRole('note')).toContainText('is frozen. Saving creates version 2');
   await page.getByLabel('Line 1 unit price').fill('3000');
   await page.getByRole('button', { name: 'Save as version 2' }).click();
   await expect(page.getByText('Saved as version 2.')).toBeVisible();
   await expect(page.getByRole('heading', { name: /Acme site v2 · draft/ })).toBeVisible();
-  await expect(page.getByRole('listitem').filter({ hasText: 'v1: superseded' })).toContainText('eeeeeeeeeeee');
+  await expect(page.getByRole('listitem').filter({ hasText: 'v1: superseded' })).toContainText(rows[0]!.pdfSha256);
 });

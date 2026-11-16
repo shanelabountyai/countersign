@@ -94,25 +94,28 @@ model Proposal {
 /// One version of a proposal: the whole document. Once it leaves `draft`, only `status` and `statusAt` may change,
 /// and only along the Phase 1 table; `signed` and `superseded` rows never change (D-21).
 model ProposalVersion {
-  id            String            @id @default(uuid()) @db.Uuid
-  orgId         String            @db.Uuid
-  proposalId    String            @db.Uuid
-  proposal      Proposal          @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  id            String             @id @default(uuid()) @db.Uuid
+  orgId         String             @db.Uuid
+  proposalId    String             @db.Uuid
+  proposal      Proposal           @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   number        Int
-  status        ProposalStatus    @default(draft)
-  statusAt      DateTime          @db.Timestamptz(6)
-  revision      Int               @default(1) // bumped by each in-place draft save (D-26)
+  status        ProposalStatus     @default(draft)
+  statusAt      DateTime           @db.Timestamptz(6)
+  revision      Int                @default(1) // bumped by each in-place draft save (D-26)
   pdfSha256     String? // SHA-256 hex of the exact PDF bytes, set at send (CS-02, D-14)
   title         String
   clientName    String // the {{client}} merge field
-  clientEmail   String            @default("")
-  scope         String            @default("") // {{scope}}
-  timeline      String            @default("") // {{timeline}}
+  clientEmail   String             @default("")
+  scope         String             @default("") // {{scope}}
+  timeline      String             @default("") // {{timeline}}
   discountType  DiscountType?
   discountValue BigInt?
-  createdAt     DateTime          @default(now()) @db.Timestamptz(6)
+  createdAt     DateTime           @default(now()) @db.Timestamptz(6)
   sections      ProposalSection[]
   lines         ProposalLine[]
+  documents     ProposalDocument[]
+  signingLinks  SigningLink[]
+  signature     ProposalSignature?
 
   @@unique([proposalId, number])
   @@index([orgId])
@@ -148,4 +151,75 @@ model ProposalLine {
   selected       Boolean         @default(false)
 
   @@unique([versionId, position])
+}
+
+// ---- Phase 3: PDFs, signing links, signatures (migration 20261116000000_countersign_signing). Every row below is
+// insert-only or nearly so, enforced by triggers (D-35); org deletion cascades through the version.
+
+enum DocumentKind {
+  proposal // the PDF the client reviews and signs; its sha256 is the version's pdfSha256
+  certificate // the completion certificate, generated in the sign transaction
+}
+
+enum SignatureMethod {
+  typed
+  drawn
+}
+
+/// The exact bytes of a PDF (D-31): verification never depends on rendering again. Never updated or deleted.
+model ProposalDocument {
+  id         String          @id @default(uuid()) @db.Uuid
+  orgId      String          @db.Uuid
+  versionId  String          @db.Uuid
+  version    ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  kind       DocumentKind
+  sha256     String // lower-case hex of `bytes`
+  byteLength Int
+  bytes      Bytes
+  createdAt  DateTime        @default(now()) @db.Timestamptz(6)
+
+  @@unique([versionId, kind])
+  @@index([orgId])
+}
+
+/// A client's signing link for one version (D-29). Only the token's sha256 is stored (INV-07). Only `revokedAt` can
+/// change, once; a link answers 410 once its version is superseded, closed, or the link has expired or been revoked.
+model SigningLink {
+  id          String          @id @default(uuid()) @db.Uuid
+  orgId       String          @db.Uuid
+  versionId   String          @db.Uuid
+  version     ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  tokenHash   String          @unique
+  createdById String?         @db.Uuid // no FK, like Proposal.createdById
+  expiresAt   DateTime        @db.Timestamptz(6)
+  revokedAt   DateTime?       @db.Timestamptz(6)
+  createdAt   DateTime        @default(now()) @db.Timestamptz(6)
+
+  @@index([versionId])
+  @@index([orgId])
+}
+
+/// The client's signature on a signed version (D-32, D-37): who, how, the consent they accepted, the add-ons they
+/// chose and the price that results. One per version, never updated or deleted.
+model ProposalSignature {
+  id              String          @id @default(uuid()) @db.Uuid
+  orgId           String          @db.Uuid
+  versionId       String          @unique @db.Uuid
+  version         ProposalVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  signerName      String
+  method          SignatureMethod
+  signatureData   String // typed text, or the drawn strokes as an integer SVG path (600×200)
+  consentVersion  String
+  consentText     String
+  pdfSha256       String // the document signed (equals the version's pdfSha256)
+  selectedLineIds String[]        @db.Uuid // optional lines chosen at signing, in line order
+  subtotalCents   BigInt
+  discountCents   BigInt
+  taxCents        BigInt
+  totalCents      BigInt
+  ipHash          String // HMAC-SHA256 (D-34)
+  userAgent       String
+  signedAt        DateTime        @db.Timestamptz(6)
+
+  @@index([orgId])
 }

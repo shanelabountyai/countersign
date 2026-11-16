@@ -3,12 +3,13 @@ import type { OrgCtx } from '@/core/authz/guards';
 import { dbSystem as db } from '@/core/db/system'; // raw writes as the owner role: the triggers, not RLS, must refuse them
 import { applyEvent, createProposal, saveDraft, type DraftInput } from '@/lib/proposal/store';
 import { resetAuthTables } from '../helpers/auth';
+import { storeTestPdf, testHash } from '../helpers/countersign';
 import { actAs, addMember, makeOrg } from '../helpers/org';
 
 // D-21 / CS-02 (database half): once a version leaves draft its rows are frozen by triggers, whatever the caller.
 // Every write here bypasses the store on purpose.
 
-const H = 'c'.repeat(64);
+const H = testHash('c'); // D-35: sends store this document first
 const content: DraftInput = {
   title: 'T', clientName: 'C', clientEmail: '', scope: '', timeline: '', discount: null,
   sections: [{ kind: 'section', title: 'S', body: 'b' }],
@@ -25,6 +26,7 @@ beforeEach(async () => {
 async function proposalAt(status: 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired' | 'superseded') {
   const id = await createProposal(ctx, { templateId: null, title: 'T', clientName: 'C' });
   await saveDraft(ctx, id, { version: 1, revision: 1 }, content);
+  if (status !== 'draft') await storeTestPdf(id, 'c');
   if (status !== 'draft') await applyEvent(ctx, id, { type: 'send', pdfSha256: H });
   if (['viewed', 'signed', 'declined'].includes(status)) await applyEvent(ctx, id, { type: 'view', version: 1, pdfSha256: H });
   if (status === 'signed') await applyEvent(ctx, id, { type: 'sign', version: 1, pdfSha256: H });
@@ -93,7 +95,8 @@ describe('statuses move only along the Phase 1 table', () => {
   });
 
   it('entering sent needs a canonical 64-hex pdfSha256', async () => {
-    const { v } = await proposalAt('draft');
+    const { id, v } = await proposalAt('draft');
+    await storeTestPdf(id, 'c');
     for (const pdfSha256 of [null, 'A'.repeat(64), 'a'.repeat(63), ` ${'a'.repeat(64)}`, 'g'.repeat(64)]) {
       await expect(db.proposalVersion.update({ where: { id: v.id }, data: { status: 'sent', pdfSha256 } })).rejects.toThrow(FROZEN);
     }
