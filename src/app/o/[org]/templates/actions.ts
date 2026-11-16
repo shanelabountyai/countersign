@@ -6,6 +6,7 @@ import { orgAction, ref } from '@/core/authz/action';
 import { Refused } from '@/core/errors';
 import { parseLines, parseSections } from '@/lib/proposal/form';
 import { InputError } from '@/lib/proposal/money';
+import { sampleTemplate } from '@/lib/proposal/sample-template';
 import { createTemplate, deleteTemplate, requireInOrg, updateTemplate } from '@/lib/proposal/store';
 import { lineColumns, sectionColumns } from '../proposals/form-schema';
 
@@ -15,6 +16,12 @@ const name = z.string().max(200);
 
 export const addTemplate = orgAction(null, z.object({ name }), async (ctx, i) => {
   const id = await createTemplate(ctx, { name: i.name, sections: [], lines: [] });
+  redirect(`/o/${ctx.slug}/templates/${id}`);
+});
+
+// Phase 4 (D-43): the Lab Intelligence sample, a new editable template in this org each time it is added.
+export const addSampleTemplate = orgAction(null, z.object({}), async (ctx) => {
+  const id = await createTemplate(ctx, sampleTemplate());
   redirect(`/o/${ctx.slug}/templates/${id}`);
 });
 
