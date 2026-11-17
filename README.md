@@ -50,13 +50,15 @@ Numbers from the Phase 4 run (2026-11-16), each produced by a command run in tha
 | Measure | Result | Command |
 |---|---|---|
 | Single-byte flips of a rendered PDF that still verified | **0 of 5,930** (the sample-template proposal PDF is 5,930 bytes; every position flipped once, plus one byte appended and one removed) | `npx vitest run tests/proposal/verify.test.ts` |
-| Re-derivation checks behind a "Verified" | 8, all passing for a real send → view → sign | `npx vitest run tests/integration/countersign-verify.test.ts` (18 tests) |
-| Unit, property, integration and invariant tests | 672 passed, 30 skipped, 58 files | `npm test` |
+| Re-derivation checks behind a "Verified" | 8, all passing for a real send → view → sign | `npx vitest run tests/integration/countersign-verify.test.ts` (30 tests) |
+| Unit, property, integration and invariant tests | 689 passed, 30 skipped, 59 files | `npm test` |
 | End-to-end tests against the production build | 18 passed, including upload of the signed PDF, its certificate, a one-byte-tampered copy and an unsigned PDF on `/verify` | `npm run test:e2e` |
 
 What it does not prove: who was at the keyboard (the trail records a hashed IP and a user agent, not an identity), or
-anything about a PDF that was never stored by this instance. Renaming the org after signing makes re-derivation fail
-(D-41): the check reports it rather than hiding it.
+anything about a PDF that was never stored by this instance. Each stored document records the org name it printed and
+the renderer version that produced it (D-45, D-46): renaming the org after signing still verifies, and a renderer upgrade
+that changes the bytes is reported as "renderer changed", apart from tampering. Documents stored before that change have
+no snapshot, so for them a rename still makes re-derivation fail (D-41).
 
 ## Foundation
 

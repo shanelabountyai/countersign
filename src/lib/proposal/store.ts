@@ -13,6 +13,7 @@ import { hashToken, newToken } from '@/core/tokens';
 import type { DiscountType, DocumentKind, LineKind as DbLineKind, ProposalStatus, SectionKind } from '@/generated/prisma/enums';
 import { sha256Hex } from './hash';
 import { renderProposalPdf, type ProposalPdfModel } from './pdf';
+import { PDF_RENDERER_VERSION } from './renderer';
 import { describeChars, unsupportedChars } from './pdf-text';
 import { renderMerge, unknownFields, type MergeValues } from './merge';
 import { LIMITS, price, PricingError, type Discount, type LineItem, type LineKind, type PricingResult } from './pricing';
@@ -558,7 +559,9 @@ export async function sendProposal(ctx: OrgCtx, proposalId: string, expected: { 
     const at = now();
     const bytes = await renderProposalPdf(model, at);
     const pdfSha256 = sha256Hex(bytes);
-    await tx.proposalDocument.create({ data: { orgId: ctx.orgId, versionId: cur.id, kind: 'proposal', sha256: pdfSha256, byteLength: bytes.length, bytes: Buffer.from(bytes) } });
+    await tx.proposalDocument.create({
+      data: { orgId: ctx.orgId, versionId: cur.id, kind: 'proposal', sha256: pdfSha256, byteLength: bytes.length, bytes: Buffer.from(bytes), orgName: model.orgName, rendererVersion: PDF_RENDERER_VERSION }, // D-45, D-46
+    });
     await applyInTx(tx, ctx, proposalId, { type: 'send', pdfSha256 }, {}, at);
     const link = await createLink(tx, ctx, cur.id, days, at);
     return { version: cur.number, pdfSha256, ...link };
