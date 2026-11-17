@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { OrgCtx } from '@/core/authz/guards';
 import { dbSystem as db } from '@/core/db/system'; // assertions and at-rest tampering run as the owner role
 import { LIMITS } from '@/core/rate-limit';
-import { CHECK_LABELS, verifyPdf, VerifyRefusal, VERIFY_MAX_BYTES, type CheckId } from '@/lib/proposal/verify';
+import { CHECK_LABELS, verifyPdf, VerifyRefusal, VERIFY_MAX_BYTES, type CheckId, type Renderer } from '@/lib/proposal/verify';
+import { renderCertificatePdf, renderProposalPdf } from '@/lib/proposal/pdf';
+import { PDF_RENDERER_VERSION } from '@/lib/proposal/renderer';
 import { recordView, signLink, type SignPost } from '@/lib/proposal/signing';
 import { createProposal, saveDraft, sendProposal, type DraftInput, type LineInput } from '@/lib/proposal/store';
 import { GET, POST } from '@/app/verify/route';
@@ -115,7 +117,12 @@ describe('a record tampered at rest is inconsistent, not verified', () => {
     ['the signer name', (s) => atRest(`UPDATE "ProposalSignature" SET "signerName" = 'Someone Else' WHERE "versionId" = $1::uuid`, s.versionId), ['certificate-rerender']],
     ['the certificate bytes', (s) => atRest(`UPDATE "ProposalDocument" SET bytes = $2 WHERE "versionId" = $1::uuid AND kind = 'certificate'`, s.versionId, Buffer.concat([s.cert, Buffer.from(' ')])), ['certificate-bytes', 'certificate-rerender']],
     ['an audit row (the signed event)', (s) => atRest(`UPDATE "AuditEvent" SET data = jsonb_set(data, '{pdfSha256}', '"${'0'.repeat(64)}"') WHERE "targetId" = $1 AND action = 'proposal.version.signed'`, s.versionId), ['audit-trail', 'certificate-rerender']],
-    ['the org name, renamed after signing (D-41: a known limit, flagged rather than hidden)', (s) => atRest(`UPDATE "Org" SET name = 'Renamed Co' WHERE id = (SELECT "orgId" FROM "ProposalVersion" WHERE id = $1::uuid)`, s.versionId), ['proposal-rerender', 'certificate-rerender']],
+    // D-41's limit, kept for documents stored before the org-name snapshot (D-46): with no snapshot the current name is used.
+    ['the org name, renamed after signing, on a document stored before the snapshot existed (D-41, D-46)', async (s) => {
+      await atRest(`UPDATE "ProposalDocument" SET "orgName" = NULL WHERE "versionId" = $1::uuid`, s.versionId);
+      await atRest(`UPDATE "Org" SET name = 'Renamed Co' WHERE id = (SELECT "orgId" FROM "ProposalVersion" WHERE id = $1::uuid)`, s.versionId);
+    }, ['proposal-rerender', 'certificate-rerender']],
+    ['the stored org-name snapshot (D-46)', (s) => atRest(`UPDATE "ProposalDocument" SET "orgName" = 'Someone Else Co' WHERE "versionId" = $1::uuid`, s.versionId), ['proposal-rerender', 'certificate-rerender']],
   ])('%s', async (_, tamper, expected) => {
     const s = await signed();
     await tamper(s);
@@ -134,6 +141,114 @@ describe('a record tampered at rest is inconsistent, not verified', () => {
     const r = await verifyPdf(evil, META()); // the swapped file: its hash is stored, but nothing else agrees with it
     expect(r.verdict).toBe('inconsistent');
     expect(failing(r)).toEqual(['signed', 'hashes-agree', 'proposal-rerender']);
+  });
+});
+
+const renameOrg = (name: string) => db.org.update({ where: { id: ctx.orgId }, data: { name } });
+
+describe('the org name is snapshotted on each stored document (issue #5, D-46 supersedes D-41)', () => {
+  it('both documents record the org name and the renderer that produced them', async () => {
+    const s = await signed();
+    const docs = await db.proposalDocument.findMany({ where: { versionId: s.versionId }, select: { kind: true, orgName: true, rendererVersion: true }, orderBy: { kind: 'asc' } });
+    expect(docs).toEqual([
+      { kind: 'proposal', orgName: 'acme', rendererVersion: PDF_RENDERER_VERSION },
+      { kind: 'certificate', orgName: 'acme', rendererVersion: PDF_RENDERER_VERSION },
+    ]);
+  });
+
+  it('org renamed after signing: the proposal PDF and the certificate are still Verified, under the name they were signed with', async () => {
+    const s = await signed();
+    await renameOrg('Renamed Co');
+    for (const file of [s.pdf, s.cert]) {
+      const r = await verifyPdf(file, META());
+      expect(r.verdict).toBe('verified');
+      expect(failing(r)).toEqual([]);
+      expect(r).toMatchObject({ record: { orgName: 'acme' } });
+    }
+    const html = await (await POST(new Request('http://localhost:8300/verify', { method: 'POST', body: (() => { const f = new FormData(); f.set('file', new File([s.pdf], 'p.pdf')); return f; })(), headers: { 'x-forwarded-for': '203.0.113.251' } }))).text();
+    expect(html).toContain('data-verdict="verified"');
+  });
+
+  it('org renamed between send and sign: each document re-renders under its own snapshot', async () => {
+    const r = await sent();
+    await renameOrg('Acme Holdings');
+    const posted = { version: r.version, pdfSha256: r.pdfSha256 };
+    await recordView(r.token, META(), posted);
+    await signLink(r.token, META(), { ...posted, signerName: 'Jane Buyer', method: 'typed', signatureData: 'Jane Buyer', consent: true, selected: [] });
+    const docs = await db.proposalDocument.findMany({ where: { version: { proposalId: r.id } } });
+    const by = (k: string) => docs.find((d) => d.kind === k)!;
+    expect([by('proposal').orgName, by('certificate').orgName]).toEqual(['acme', 'Acme Holdings']);
+    await renameOrg('Third Name LLC');
+    for (const d of docs) expect(await verifyPdf(Buffer.from(d.bytes), META())).toMatchObject({ verdict: 'verified' });
+  });
+
+  it('the snapshot is frozen with the document (D-35): it cannot be updated', async () => {
+    const s = await signed();
+    await expect(db.proposalDocument.updateMany({ where: { versionId: s.versionId }, data: { orgName: 'Renamed Co' } })).rejects.toThrow(/countersign_frozen/);
+  });
+});
+
+describe('a renderer change is reported apart from tampering (issue #5, D-45)', () => {
+  /** A stand-in for a different installed renderer: renders with the real one, then changes the output the way an upgrade could. */
+  const otherRenderer = (version: string, changed = true): Renderer => {
+    const tweak = (b: Uint8Array) => (changed ? Buffer.concat([Buffer.from(b), Buffer.from('% re-rendered by another renderer\n')]) : b);
+    return { version, proposal: async (m, at) => tweak(await renderProposalPdf(m, at)), certificate: async (m, at) => tweak(await renderCertificatePdf(m, at)) };
+  };
+
+  it('stored hashes match, the bytes no longer re-render under another renderer version: renderer_changed, not inconsistent', async () => {
+    const s = await signed();
+    const renderer = otherRenderer('@react-pdf/renderer@9.9.9+000000000000');
+    for (const [file, kind] of [[s.pdf, 'proposal'], [s.cert, 'certificate']] as const) {
+      const r = await verifyPdf(file, META(), { renderer });
+      expect(r).toMatchObject({ verdict: 'renderer_changed', kind, renderer: { current: '@react-pdf/renderer@9.9.9+000000000000', proposal: PDF_RENDERER_VERSION, certificate: PDF_RENDERER_VERSION } });
+      expect(failing(r)).toEqual(['proposal-rerender', 'certificate-rerender']);
+    }
+  });
+
+  it('the HTML says the renderer changed, names both versions, and does not say Verified or inconsistent', async () => {
+    const { verifyResultPage } = await import('@/lib/proposal/verify-http');
+    const s = await signed();
+    const r = await verifyPdf(s.pdf, META(), { renderer: otherRenderer('@react-pdf/renderer@9.9.9+000000000000') });
+    const html = await verifyResultPage(r).text();
+    expect(html).toContain('data-verdict="renderer_changed"');
+    expect(html).toContain('renderer has changed');
+    expect(html).toContain(PDF_RENDERER_VERSION);
+    expect(html).toContain('@react-pdf/renderer@9.9.9+000000000000');
+    expect(html).not.toContain('data-verdict="verified"');
+    expect(html).not.toContain('inconsistent');
+  });
+
+  it('another renderer version that still renders the identical bytes: verified', async () => {
+    const s = await signed();
+    expect(await verifyPdf(s.pdf, META(), { renderer: otherRenderer('@react-pdf/renderer@9.9.9+000000000000', false) })).toMatchObject({ verdict: 'verified' });
+  });
+
+  it('the same renderer version rendering different bytes is inconsistent (the recorded renderer must reproduce its output)', async () => {
+    const s = await signed();
+    const r = await verifyPdf(s.pdf, META(), { renderer: otherRenderer(PDF_RENDERER_VERSION) });
+    expect(r.verdict).toBe('inconsistent');
+    expect(failing(r)).toEqual(['proposal-rerender', 'certificate-rerender']);
+  });
+
+  it('a renderer change never hides tampering: another failing check makes it inconsistent', async () => {
+    const s = await signed();
+    await atRest(`UPDATE "ProposalSignature" SET "totalCents" = "totalCents" + 1 WHERE "versionId" = $1::uuid`, s.versionId);
+    const r = await verifyPdf(s.pdf, META(), { renderer: otherRenderer('@react-pdf/renderer@9.9.9+000000000000') });
+    expect(r.verdict).toBe('inconsistent');
+    expect(failing(r)).toEqual(['proposal-rerender', 'pricing', 'certificate-rerender']);
+  });
+
+  it('a document stored before renderer versions were recorded cannot claim a renderer change: inconsistent', async () => {
+    const s = await signed();
+    await atRest(`UPDATE "ProposalDocument" SET "rendererVersion" = NULL WHERE "versionId" = $1::uuid`, s.versionId);
+    const r = await verifyPdf(s.pdf, META(), { renderer: otherRenderer('@react-pdf/renderer@9.9.9+000000000000') });
+    expect(r.verdict).toBe('inconsistent');
+  });
+
+  it('a stored renderer version rewritten at rest does not matter while the bytes still re-render: verified', async () => {
+    const s = await signed();
+    await atRest(`UPDATE "ProposalDocument" SET "rendererVersion" = 'forged' WHERE "versionId" = $1::uuid`, s.versionId);
+    expect(await verifyPdf(s.pdf, META())).toMatchObject({ verdict: 'verified' });
   });
 });
 
