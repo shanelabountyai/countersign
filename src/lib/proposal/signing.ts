@@ -11,6 +11,7 @@ import { hit, LIMITS } from '@/core/rate-limit';
 import { normalizeSha256, sha256Hex } from './hash';
 import { certificateModel, priceVersionSelection, trailOf } from './certificate';
 import { renderCertificatePdf } from './pdf';
+import { PDF_RENDERER_VERSION } from './renderer';
 import { SelectionError } from './selection';
 import { CONSENT_VERSION, checkSignature, cleanUserAgent, consentText, ipHash, ipHashKey, SignatureError, type SignatureMethod } from './signature';
 import { findLink, lapsedVersions, type LinkRow } from './signing-link';
@@ -225,7 +226,9 @@ export async function signLink(token: string, meta: ClientMeta, posted: SignPost
       }),
       at,
     );
-    await tx.proposalDocument.create({ data: { orgId: l.link.orgId, versionId: v.id, kind: 'certificate', sha256: sha256Hex(bytes), byteLength: bytes.length, bytes: Buffer.from(bytes) } });
+    await tx.proposalDocument.create({
+      data: { orgId: l.link.orgId, versionId: v.id, kind: 'certificate', sha256: sha256Hex(bytes), byteLength: bytes.length, bytes: Buffer.from(bytes), orgName: l.orgName, rendererVersion: PDF_RENDERER_VERSION }, // D-45, D-46
+    });
   });
 }
 

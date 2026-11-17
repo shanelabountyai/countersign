@@ -177,6 +177,10 @@ model ProposalDocument {
   byteLength Int
   bytes      Bytes
   createdAt  DateTime        @default(now()) @db.Timestamptz(6)
+  /// What the bytes were rendered from that is not on the frozen version (issue #5). Written once at insert (the D-35
+  /// trigger keeps the row insert-only); NULL on documents stored before the columns existed.
+  orgName         String? // the org name printed on this document, as it was when rendered (D-46, supersedes D-41)
+  rendererVersion String? // PDF_RENDERER_VERSION of the build that rendered it (D-45)
 
   @@unique([versionId, kind])
   @@index([orgId])

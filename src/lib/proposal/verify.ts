@@ -3,11 +3,15 @@
 // verified only after the record re-derives from stored data (D-40): the stored bytes, the recorded hashes and the audit
 // trail agree, the version is signed (D-17), the proposal PDF and the certificate re-render to the identical bytes, and
 // the agreed price re-computes. Any changed byte in the upload means no stored document has its hash: "not verified".
+// Each stored document carries the org name it printed and the renderer that produced it (issue #5): re-rendering uses
+// the snapshot (D-46, supersedes D-41), and when the only failing checks are re-renders of documents recorded under
+// another renderer version, the verdict is "renderer_changed" rather than "inconsistent" (D-45).
 import { withOrg, type Tx } from '@/core/db/rls';
 import { hit, LIMITS } from '@/core/rate-limit';
 import { certificateModel, priceVersionSelection, trailOf } from './certificate';
 import { matchSignedVersion, sha256Hex } from './hash';
 import { renderCertificatePdf, renderProposalPdf } from './pdf';
+import { PDF_RENDERER_VERSION } from './renderer';
 import type { PricingResult } from './pricing';
 import { proposalPdfModel, versionsOf, type VersionRow } from './store';
 import { documentsByHash, type DocumentHit } from './verify-lookup';
@@ -31,6 +35,13 @@ export const CHECK_LABELS: Record<CheckId, string> = {
 
 export type Check = { id: CheckId; ok: boolean };
 
+/** The renderer verify re-renders with: the installed one, or a stand-in in tests (a simulated upgrade). */
+export type Renderer = { version: string; proposal: typeof renderProposalPdf; certificate: typeof renderCertificatePdf };
+export const INSTALLED_RENDERER: Renderer = { version: PDF_RENDERER_VERSION, proposal: renderProposalPdf, certificate: renderCertificatePdf };
+
+/** The renderer now, and the one recorded on each stored document (null: stored before versions were recorded). */
+export type RendererInfo = { current: string; proposal: string | null; certificate: string | null };
+
 export type VerifiedRecord = {
   orgName: string;
   title: string;
@@ -46,7 +57,10 @@ export type VerifiedRecord = {
 export type VerifyResult =
   | { verdict: 'no_match'; sha256: string; byteLength: number }
   | { verdict: 'not_signed'; sha256: string; byteLength: number; kind: DocumentHit['kind']; status: VersionStatus }
-  | { verdict: 'verified' | 'inconsistent'; sha256: string; byteLength: number; kind: DocumentHit['kind']; checks: Check[]; record: VerifiedRecord };
+  | { verdict: 'verified' | 'renderer_changed' | 'inconsistent'; sha256: string; byteLength: number; kind: DocumentHit['kind']; checks: Check[]; record: VerifiedRecord; renderer: RendererInfo };
+
+/** How good a verdict is, to keep the best when several stored documents share the upload's hash. */
+const RANK: Record<VerifyResult['verdict'], number> = { no_match: 0, not_signed: 1, inconsistent: 2, renderer_changed: 3, verified: 4 };
 
 /** A refused upload: an HTTP status and a message for the page. */
 export class VerifyRefusal extends Error {
@@ -67,7 +81,8 @@ export async function checkVerifyLimit(ip: string) {
  * Verifies an uploaded file. Writes nothing but the per-IP rate-limit counter (`limited`: the caller already counted this
  * request, as the route does before reading the body).
  */
-export async function verifyPdf(bytes: Uint8Array, meta: { ip: string; limited?: boolean }): Promise<VerifyResult> {
+export async function verifyPdf(bytes: Uint8Array, meta: { ip: string; limited?: boolean }, opts: { renderer?: Renderer } = {}): Promise<VerifyResult> {
+  const renderer = opts.renderer ?? INSTALLED_RENDERER;
   if (!meta.limited) await checkVerifyLimit(meta.ip);
   if (!(bytes instanceof Uint8Array) || bytes.length === 0) throw new VerifyRefusal(400, 'Choose a PDF file to check.');
   if (bytes.length > VERIFY_MAX_BYTES) throw new VerifyRefusal(413, `That file is larger than ${VERIFY_MAX_BYTES / 1024 / 1024} MB, so it is not a Countersign document.`);
@@ -76,9 +91,9 @@ export async function verifyPdf(bytes: Uint8Array, meta: { ip: string; limited?:
   const hits = await documentsByHash(sha256);
   let best: VerifyResult = { verdict: 'no_match', ...base };
   for (const d of hits) {
-    const r = await examine(d, bytes, base);
+    const r = await examine(d, bytes, base, renderer);
     if (r.verdict === 'verified') return r;
-    if (best.verdict === 'no_match' || (best.verdict === 'not_signed' && r.verdict === 'inconsistent')) best = r;
+    if (RANK[r.verdict] > RANK[best.verdict]) best = r;
   }
   return best;
 }
@@ -92,19 +107,21 @@ const safely = async (fn: () => Promise<boolean> | boolean) => {
   }
 };
 
-async function examine(d: DocumentHit, upload: Uint8Array, base: { sha256: string; byteLength: number }): Promise<VerifyResult> {
+async function examine(d: DocumentHit, upload: Uint8Array, base: { sha256: string; byteLength: number }, renderer: Renderer): Promise<VerifyResult> {
   return withOrg({ orgId: d.orgId }, async (tx) => {
     const row = await tx.proposalVersion.findFirst({ where: { id: d.versionId, orgId: d.orgId }, select: { proposalId: true } });
     const v = row && (await versionsOf(tx, { orgId: d.orgId, userId: null }, row.proposalId)).find((x) => x.id === d.versionId);
     if (!v) return { verdict: 'no_match', ...base } as const;
     if (v.status !== 'signed') return { verdict: 'not_signed', ...base, kind: d.kind, status: v.status } as const;
-    return { ...(await rederive(tx, d, v, upload)), ...base, kind: d.kind };
+    return { ...(await rederive(tx, d, v, upload, renderer)), ...base, kind: d.kind };
   }, { atomic: false });
 }
 
-async function rederive(tx: Tx, d: DocumentHit, v: VersionRow, upload: Uint8Array): Promise<{ verdict: 'verified' | 'inconsistent'; checks: Check[]; record: VerifiedRecord }> {
+type Rederived = { verdict: 'verified' | 'renderer_changed' | 'inconsistent'; checks: Check[]; record: VerifiedRecord; renderer: RendererInfo };
+
+async function rederive(tx: Tx, d: DocumentHit, v: VersionRow, upload: Uint8Array, renderer: Renderer): Promise<Rederived> {
   const [docs, sig, org, events] = await Promise.all([
-    tx.proposalDocument.findMany({ where: { versionId: v.id, orgId: d.orgId }, select: { id: true, kind: true, sha256: true, byteLength: true, bytes: true } }),
+    tx.proposalDocument.findMany({ where: { versionId: v.id, orgId: d.orgId }, select: { id: true, kind: true, sha256: true, byteLength: true, bytes: true, orgName: true, rendererVersion: true } }),
     tx.proposalSignature.findUnique({ where: { versionId: v.id } }),
     tx.org.findUnique({ where: { id: d.orgId }, select: { name: true } }),
     tx.auditEvent.findMany({ where: { orgId: d.orgId, targetType: 'proposalVersion', targetId: v.id }, orderBy: { id: 'asc' }, select: { id: true, action: true, at: true, data: true } }),
@@ -112,7 +129,10 @@ async function rederive(tx: Tx, d: DocumentHit, v: VersionRow, upload: Uint8Arra
   const uploaded = docs.find((x) => x.id === d.id);
   const pdf = docs.find((x) => x.kind === 'proposal');
   const cert = docs.find((x) => x.kind === 'certificate');
-  const orgName = org?.name ?? '';
+  // The name each document printed (D-46); a document stored before the snapshot falls back to the current name (D-41).
+  const currentOrgName = org?.name ?? '';
+  const proposalOrgName = pdf?.orgName ?? currentOrgName;
+  const certificateOrgName = cert?.orgName ?? currentOrgName;
   const dataOf = (e: (typeof events)[number]) => (e.data ?? {}) as Record<string, unknown>;
   const sentEvent = events.find((e) => e.action === 'proposal.version.sent');
   const signedAt = events.findIndex((e) => e.action === 'proposal.version.signed');
@@ -132,7 +152,7 @@ async function rederive(tx: Tx, d: DocumentHit, v: VersionRow, upload: Uint8Arra
   await add('proposal-rerender', async () => {
     const at = typeof dataOf(sentEvent!).at === 'string' ? new Date(dataOf(sentEvent!).at as string) : null;
     if (!pdf || !at || Number.isNaN(at.getTime())) return false;
-    return same(await renderProposalPdf(proposalPdfModel(v, orgName), at), pdf.bytes);
+    return same(await renderer.proposal(proposalPdfModel(v, proposalOrgName), at), pdf.bytes);
   });
   let pricing: PricingResult | null = null;
   try {
@@ -149,18 +169,28 @@ async function rederive(tx: Tx, d: DocumentHit, v: VersionRow, upload: Uint8Arra
   await add('certificate-rerender', async () => {
     if (!cert || !sig || !pdf || !pricing || !signedEvent) return false;
     const model = certificateModel({
-      orgName, version: v, pdfSha256: sig.pdfSha256, pdfBytes: pdf.byteLength, signedAt: sig.signedAt,
+      orgName: certificateOrgName, version: v, pdfSha256: sig.pdfSha256, pdfBytes: pdf.byteLength, signedAt: sig.signedAt,
       signer: { name: sig.signerName, method: sig.method, data: sig.signatureData }, consent: sig.consentText,
       chosen: new Set(sig.selectedLineIds), pricing, trail: trailOf(events.slice(0, signedAt + 1)),
     });
-    return same(await renderCertificatePdf(model, sig.signedAt), cert.bytes);
+    return same(await renderer.certificate(model, sig.signedAt), cert.bytes);
   });
 
+  // A re-render can fail only because the renderer moved (not the record) when that document recorded another renderer
+  // version. NULL (stored before versions were recorded) proves nothing, so it never earns the softer verdict.
+  const info: RendererInfo = { current: renderer.version, proposal: pdf?.rendererVersion ?? null, certificate: cert?.rendererVersion ?? null };
+  const movedOn = (stored: string | null) => stored !== null && stored !== renderer.version;
+  const explainedByRenderer = (c: Check) =>
+    (c.id === 'proposal-rerender' && movedOn(info.proposal)) || (c.id === 'certificate-rerender' && movedOn(info.certificate));
+  const failed = checks.filter((c) => !c.ok);
+  const verdict = failed.length === 0 ? 'verified' : failed.every(explainedByRenderer) ? 'renderer_changed' : 'inconsistent';
+
   return {
-    verdict: checks.every((c) => c.ok) ? 'verified' : 'inconsistent',
+    verdict,
     checks,
+    renderer: info,
     record: {
-      orgName, title: v.title, clientName: v.clientName, version: v.number,
+      orgName: proposalOrgName, title: v.title, clientName: v.clientName, version: v.number,
       signerName: sig?.signerName ?? null, signedAt: sig?.signedAt ?? null, totalCents: sig ? Number(sig.totalCents) : null,
       pdfSha256: v.pdfSha256, certificateSha256: cert?.sha256 ?? null,
     },

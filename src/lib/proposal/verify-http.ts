@@ -9,7 +9,8 @@ body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;bac
 main{max-width:44rem;margin:0 auto;padding:2rem 1rem}
 .card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:1rem 1.25rem;margin:1rem 0}
 .ok{border-color:#1f7a3a;background:#effaf2}.fail{border-color:#b42318;background:#fef3f2}
-.ok h2{color:#1f7a3a}.fail h2{color:#b42318}
+.warn{border-color:#9a6700;background:#fff8e6}
+.ok h2{color:#1f7a3a}.fail h2{color:#b42318}.warn h2{color:#7a5200}
 code{font-size:.85em;word-break:break-all}
 ul.checks{list-style:none;padding:0}ul.checks li{margin:.25rem 0}
 dl{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem}dt{color:#555}dd{margin:0}
@@ -60,6 +61,18 @@ ${rec.pdfSha256 ? `<dt>Proposal PDF SHA-256</dt><dd><code>${rec.pdfSha256}</code
 ${rec.certificateSha256 ? `<dt>Certificate SHA-256</dt><dd><code>${rec.certificateSha256}</code></dd>` : ''}
 </dl>`;
   const checks = `<ul class="checks">${r.checks.map((c) => `<li data-check="${c.id}" data-ok="${c.ok}">${c.ok ? '✓' : '✗'} ${esc(CHECK_LABELS[c.id])}</li>`).join('')}</ul>`;
+  if (r.verdict === 'renderer_changed') {
+    // D-45: every stored hash, the trail and the price agree; only re-rendering failed, and the documents were rendered by
+    // another version of the PDF renderer than the one installed now. Not evidence of tampering, and not a full check.
+    const was = [...new Set([r.renderer.proposal, r.renderer.certificate].filter((x): x is string => !!x))];
+    return `<div class="card warn" data-verdict="renderer_changed" role="status"><h2>Hashes match; the PDF renderer has changed since signing</h2>
+<p>Your file is the stored ${r.kind === 'certificate' ? 'completion certificate' : 'proposal'} of a signed version, and every stored fingerprint, the audit trail and
+the agreed price still agree. The documents were rendered by <code>${was.map(esc).join('</code>, <code>')}</code>; this server now runs
+<code>${esc(r.renderer.current)}</code>, which no longer produces the identical bytes, so the re-render checks below could not be
+repeated. That is a software change on our side, not a change to the document. Ask the sender to confirm with the original renderer
+if you need the full check.</p>
+${fingerprint(r)}${details}${checks}</div>`;
+  }
   if (r.verdict === 'verified') {
     return `<div class="card ok" data-verdict="verified" role="status"><h2>Verified: this is the signed ${r.kind === 'certificate' ? 'completion certificate' : 'proposal'}</h2>
 ${fingerprint(r)}${details}<h3>Re-derived from the stored record</h3>${checks}</div>`;
