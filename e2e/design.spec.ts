@@ -147,3 +147,56 @@ test('templates, verify and the link notices pass axe', async ({ page }) => {
   expect(missing!.status()).toBe(404);
   await axe(anon, '404 link');
 });
+
+test('review fixes: send keeps the link and refreshes the page; a refused save keeps the fields; editors reflow at 320 px; decline keeps focus', async ({ page, browser }) => {
+  await signIn(page);
+  await page.getByRole('navigation').getByRole('link', { name: 'Proposals' }).click();
+  await page.waitForURL(/\/proposals$/);
+  const title = `Fixes ${Date.now()}`;
+  await page.getByLabel('Title').fill(title);
+  await page.getByLabel('Client').fill('Globex');
+  await page.getByRole('button', { name: 'Create proposal' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+
+  // UX-2 / A11Y-3: a refused save keeps what was typed and focuses the message beside the button.
+  await page.getByLabel('Scope', { exact: true }).fill('kept scope');
+  await page.getByLabel('Line 1 description').fill('Design');
+  await page.getByLabel('Line 1 unit price').fill('12.345'); // more than 2 decimals is refused (D-23)
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Line 1' })).toBeFocused();
+  await expect(page.getByLabel('Scope', { exact: true })).toHaveValue('kept scope');
+  await expect(page.getByLabel('Line 1 unit price')).toHaveValue('12.345');
+  await page.getByLabel('Line 1 unit price').fill('100');
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByRole('status')).toHaveText('Draft saved.');
+
+  // A11Y-1: no sideways scroll at 320 px.
+  await page.setViewportSize({ width: 320, height: 800 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  // UX-1 / UX-7: the link stays in a copyable field and the page below shows the new status, with no stale Send.
+  await page.reload();
+  await page.getByRole('button', { name: 'Send version 1' }).click();
+  const link = page.getByLabel('Signing link (shown once)');
+  await expect(link).toHaveValue(/\/sign\//);
+  await expect(page.getByTestId('version-line')).toHaveText(/Version 1.*Sent/);
+  await expect(page.getByRole('button', { name: 'Send version 1' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save as version 2' })).toBeVisible();
+  const path = new URL(await link.inputValue()).pathname;
+
+  // A11Y-2: opening and closing the decline panel never drops focus to <body>.
+  const client = await (await browser.newContext()).newPage();
+  await client.goto(path);
+  await client.getByRole('button', { name: 'Open proposal' }).click();
+  const decline = client.getByText('Decline', { exact: true });
+  await decline.focus();
+  await client.keyboard.press('Enter');
+  await expect(client.getByRole('group', { name: 'Decline this proposal?' })).toBeVisible();
+  await expect(decline).toBeFocused();
+  await expect(async () => {
+    const keep = client.getByRole('button', { name: 'Keep reviewing' });
+    if (await keep.isVisible()) await keep.click();
+    await expect(decline).toBeFocused({ timeout: 1000 });
+  }).toPass();
+});

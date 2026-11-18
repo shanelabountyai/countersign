@@ -43,8 +43,8 @@ function goneNotice(reason: GoneReason, title?: string, orgName?: string): Notic
       return {
         tone: 'warn', glyph: '↻', word: 'Replaced by a newer version',
         heading: `This link is for an earlier version of ${title ? `“${title}”` : 'the proposal'}, which ${sender} has since updated.`,
-        text: `Nothing was signed on this version, and it can't be signed now. Open the link ${sender} sent you for the newer version to review and sign.`,
-        more: `<ul><li>Can't find it? Ask ${esc(sender)} to send you the link to the newest version.</li></ul>`,
+        text: `Nothing was signed on this version, and it can't be signed now. ${orgName ?? 'The sender'} will send you a new link once the updated version is ready.`,
+        more: `<ul><li>Already have a newer link? Use that one.</li><li>Still waiting? Ask ${esc(sender)} for the link to the newest version.</li></ul>`,
       };
     case 'declined':
       return { tone: 'bad', glyph: '✗', word: 'Declined', heading: `${doc} was declined.`, text: `Nothing was signed, and this link no longer works. If that was a mistake, contact ${sender} and ask for a new version.` };
@@ -71,14 +71,15 @@ export function landingPage(token: string, v: Extract<LinkView, { code: 200 }>):
     v.version.status === 'sent'
       ? `<form method="post" action="${base}/view"><input type="hidden" name="version" value="${v.version.number}"><input type="hidden" name="pdfSha256" value="${esc(v.pdf.sha256)}"><button type="submit" class="cs-btn cs-btn--primary cs-btn--lg">Open proposal</button></form>`
       : `<p><a class="cs-btn cs-btn--primary cs-btn--lg" href="${base}/review">${v.state === 'completed' ? 'See the signed proposal' : 'Continue to the proposal'}</a></p>`;
-  const top = topNote(`Sent to you by <strong>${esc(v.orgName)}</strong> · Version ${v.version.number}`);
+  const done = v.state === 'completed';
+  const top = topNote(`${done ? 'Signed with' : 'Sent to you by'} <strong>${esc(v.orgName)}</strong> · Version ${v.version.number}`);
   const facts = v.state === 'completed'
     ? `<div><dt>Status</dt><dd>${pillHtml('signed')}</dd></div><div><dt>Total</dt><dd><strong>${esc(displayCents(v.signature?.totalCents ?? v.version.pricing.totalCents))}</strong></dd></div>`
     : `<div><dt>Total (default add-ons)</dt><dd><strong>${esc(displayCents(v.version.pricing.totalCents))}</strong></dd></div><div><dt>Link valid until</dt><dd>${esc(dayTime(v.expiresAt))}</dd></div>`;
   return page(
     200,
     v.version.title,
-    `${orgMark(v.orgName)}<section class="cs-notice cs-landing" aria-labelledby="cs-t"><span class="cs-eyebrow">Proposal for ${esc(v.version.clientName)}</span><h1 id="cs-t">${esc(v.version.title)}</h1><dl>${facts}</dl>${open}<p class="cs-small">Opening the proposal is recorded in its audit trail with the time, a hashed IP address and your browser.</p></section>${DEMO}`,
+    `${orgMark(v.orgName)}<section class="cs-notice cs-landing" aria-labelledby="cs-t"><span class="cs-eyebrow">Proposal for ${esc(v.version.clientName)}</span><h1 id="cs-t">${esc(v.version.title)}</h1><dl>${facts}</dl>${open}<p class="cs-small">${done ? 'This proposal is signed. You can read it and download the PDF and the completion certificate.' : v.version.status === 'sent' ? 'Opening the proposal is recorded in its audit trail with the time, a hashed IP address and your browser.' : 'You opened this proposal before; it is waiting for your answer.'}</p></section>${DEMO}`,
     { top },
   );
 }

@@ -8,6 +8,7 @@ import { day, dayTime } from '@/lib/ui/format';
 import { StatusPill } from '@/lib/ui/status-pill';
 import { newLinkAction, removeProposal, saveProposal, sendProposalAction } from '../actions';
 import { LineRows, SectionRows } from '../editor-fields';
+import { EditorForm, LinkActionForm } from '../editor-form';
 
 export const metadata = { title: 'Edit proposal' };
 
@@ -80,7 +81,9 @@ export default async function ProposalEditor({ params, searchParams }: { params:
             <span className="cs-banner__glyph" aria-hidden="true">◐</span>
             <p>
               <strong>Version {v.number} {STATUS_NOTE[v.status]} and is frozen. Saving creates version {v.number + 1} as a new draft.</strong>{' '}
-              Once you save it, the version {v.number} link stops working and the client sees a &ldquo;newer version&rdquo; page.
+              {v.status === 'sent' || v.status === 'viewed'
+                ? <>Once you save it, the version {v.number} link stops working and the client sees a &ldquo;newer version&rdquo; page.</>
+                : <>Its link already no longer works; send the new version to give the client a fresh link.</>}
             </p>
           </div>
         )}
@@ -91,40 +94,28 @@ export default async function ProposalEditor({ params, searchParams }: { params:
           </div>
         )}
 
-        {editable && v.status === 'draft' && (
+        {((editable && v.status === 'draft') || v.status === 'sent' || v.status === 'viewed') && (
+          // One card in one place for both states, so the one-time link stays on screen while the page refreshes (UX-1).
           <section aria-labelledby="cs-send" className="cs-card">
-            <h2 id="cs-send">Send</h2>
+            <h2 id="cs-send">{v.status === 'draft' ? 'Send' : 'Signing link'}</h2>
             <p style={{ margin: 0, color: 'var(--cs-ink-2)' }}>
-              Sending renders this draft as a PDF, records its SHA-256 and freezes version {v.number}. You get a signing link to give the client; no email is sent.
+              {v.status === 'draft'
+                ? <>Sending renders this draft as a PDF, records its SHA-256 and freezes version {v.number}. You get a signing link to give the client; no email is sent.</>
+                : <>{liveLink ? <>The client&apos;s link is valid until {dayTime(liveLink.expiresAt)}.</> : <>No live link.</>} {v.status === 'viewed' ? 'The client has opened the proposal.' : 'The client has not opened it yet.'}</>}
             </p>
-            <ActionForm action={sendProposalAction.bind(null, ctx.slug)}>
-              <input type="hidden" name="id" value={id} />
-              <input type="hidden" name="expectedVersion" value={String(v.number)} />
-              <input type="hidden" name="expectedRevision" value={String(v.revision)} />
-              <div className="cs-actions" style={{ alignItems: 'flex-end' }}>
-                {daysField}
-                <button type="submit" className="cs-btn cs-btn--primary">Send version {v.number}</button>
-              </div>
-            </ActionForm>
-          </section>
-        )}
-        {(v.status === 'sent' || v.status === 'viewed') && (
-          <section aria-labelledby="cs-link" className="cs-card">
-            <h2 id="cs-link">Signing link</h2>
-            <p style={{ margin: 0 }}>
-              {liveLink ? <>The client&apos;s link is valid until {dayTime(liveLink.expiresAt)}.</> : <>No live link.</>}{' '}
-              {v.status === 'viewed' ? 'The client has opened the proposal.' : 'The client has not opened it yet.'}
-            </p>
-            {editable && (
-              <ActionForm action={newLinkAction.bind(null, ctx.slug)}>
+            {editable && (v.status === 'draft' ? (
+              <LinkActionForm key="link" action={sendProposalAction.bind(null, ctx.slug)} button={`Send version ${v.number}`}>
                 <input type="hidden" name="id" value={id} />
-                <div className="cs-actions" style={{ alignItems: 'flex-end' }}>
-                  {daysField}
-                  <button type="submit" className="cs-btn">Replace the link</button>
-                </div>
-                <p className="cs-hint" style={{ margin: '8px 0 0' }}>The new link is shown once. The current one stops working.</p>
-              </ActionForm>
-            )}
+                <input type="hidden" name="expectedVersion" value={String(v.number)} />
+                <input type="hidden" name="expectedRevision" value={String(v.revision)} />
+                {daysField}
+              </LinkActionForm>
+            ) : (
+              <LinkActionForm key="link" action={newLinkAction.bind(null, ctx.slug)} button="Replace the link" hint="The new link is shown once. The current one stops working.">
+                <input type="hidden" name="id" value={id} />
+                {daysField}
+              </LinkActionForm>
+            ))}
           </section>
         )}
         {cur?.signature && (
@@ -191,7 +182,7 @@ export default async function ProposalEditor({ params, searchParams }: { params:
             <div className="cs-doc-preview">
               {[...sections, ...terms].map((s) => (
                 <div key={s.id}>
-                  <h3>{s.renderedTitle}{s.kind === 'terms' ? ' (terms)' : ''}</h3>
+                  <h3>{s.renderedTitle}{s.kind === 'terms' && !/terms/i.test(s.renderedTitle) ? ' (terms)' : ''}</h3>
                   <p>{s.rendered}</p>
                 </div>
               ))}
@@ -200,8 +191,8 @@ export default async function ProposalEditor({ params, searchParams }: { params:
         </section>
 
         {editable && (
-          <ActionForm action={saveProposal.bind(null, ctx.slug)}>
-            <div className="cs-rows" style={{ gap: 18 }}>
+          <EditorForm action={saveProposal.bind(null, ctx.slug)}
+            footer={<button type="submit" className="cs-btn cs-btn--primary">{v.status === 'draft' ? 'Save draft' : `Save as version ${v.number + 1}`}</button>}>
               <input type="hidden" name="id" value={id} />
               <input type="hidden" name="expectedVersion" value={String(v.number)} />
               <input type="hidden" name="expectedRevision" value={String(v.revision)} />
@@ -231,10 +222,8 @@ export default async function ProposalEditor({ params, searchParams }: { params:
                 </div>
               </section>
               <SectionRows sections={v.sections} />
-              <LineRows lines={v.lines.map((l) => l.input)} />
-              <div><button type="submit" className="cs-btn cs-btn--primary">{v.status === 'draft' ? 'Save draft' : `Save as version ${v.number + 1}`}</button></div>
-            </div>
-          </ActionForm>
+              <LineRows lines={v.lines.map((l) => l.input)} title="Edit line items" />
+          </EditorForm>
         )}
 
         {editable && neverSent && (
@@ -259,7 +248,7 @@ export default async function ProposalEditor({ params, searchParams }: { params:
               const done = i < step || (i === step && step === 3);
               const now = i === step && step !== 3;
               return (
-                <li key={s.word} className={done ? 'cs-done' : now ? 'cs-now' : ''}>
+                <li key={s.word} className={done ? 'cs-step--done' : now ? 'cs-step--now' : ''}>
                   <span className="cs-steps__g" aria-hidden="true">{done ? '✓' : now ? '●' : '○'}</span>
                   {s.word}<span className="cs-vh">{done ? ' (done)' : now ? ' (current)' : ' (not yet)'}</span>
                   <span className="cs-when">{s.when}</span>

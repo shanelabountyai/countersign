@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import { displayCents } from '@/lib/proposal/money';
 import type { Discount } from '@/lib/proposal/pricing';
 import { priceSelection } from '@/lib/proposal/selection';
@@ -34,6 +34,11 @@ export function SignForm(p: {
   const nameRef = useRef<HTMLInputElement>(null);
   const typedRef = useRef<HTMLInputElement>(null);
   const declineRef = useRef<HTMLDetailsElement>(null);
+  const summaryRef = useRef<HTMLElement>(null);
+  const alertRef = useRef<HTMLDivElement>(null);
+  const [drawnEmpty, setDrawnEmpty] = useState(false);
+  // A refused sign comes back as a fresh page load; an alert present at load is not announced, so focus it (A11Y-5).
+  useEffect(() => { if (p.error) alertRef.current?.focus(); }, [p.error]);
   const items = useMemo(() => p.lines.map((l) => ({ ...l, discount: l.discount ?? undefined })), [p.lines]);
   const priced = useMemo(() => priceSelection({ lines: items, ...(p.discount ? { discount: p.discount } : {}) }, [...chosen]), [items, p.discount, chosen]);
   const toggle = (id: string) => setChosen((s) => {
@@ -54,9 +59,17 @@ export function SignForm(p: {
 
       <section aria-labelledby="cs-sign-h" className="cs-panel">
         <h2 id="cs-sign-h">Sign this proposal</h2>
-        {p.error && <div role="alert" className="cs-alert"><span aria-hidden="true">✗</span><p>{p.error}</p></div>}
+        {(p.error || drawnEmpty) && <div role="alert" className="cs-alert" tabIndex={-1} ref={alertRef}><span aria-hidden="true">✗</span><p>{drawnEmpty ? 'Draw your signature in the box, or type it instead.' : p.error}</p></div>}
         <form id={FORM_ID} method="post" action={p.action} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
-          onSubmit={() => { if (typedRef.current && nameRef.current) typedRef.current.value = nameRef.current.value; }}>
+          onSubmit={(e) => {
+            if (typedRef.current && nameRef.current) typedRef.current.value = nameRef.current.value;
+            const drawn = e.currentTarget.elements.namedItem('drawn');
+            if (method === 'drawn' && drawn instanceof HTMLInputElement && !drawn.value) { // checked here so nothing on the page is lost (UX-4)
+              e.preventDefault();
+              setDrawnEmpty(true);
+              requestAnimationFrame(() => alertRef.current?.focus());
+            }
+          }}>
           <input type="hidden" name="version" value={String(p.version)} />
           <input type="hidden" name="pdfSha256" value={p.pdfSha256} />
           <input type="hidden" name="method" value={method} />
@@ -82,16 +95,17 @@ export function SignForm(p: {
               {method === 'typed' ? (
                 <span className="cs-hint">Your typed name is your signature. Or <button type="button" className="cs-linkbtn" onClick={() => setMethod('drawn')}>draw your signature instead</button></span>
               ) : (
-                <span className="cs-hint">Draw below. Or <button type="button" className="cs-linkbtn" onClick={() => setMethod('typed')}>type your signature instead</button></span>
+                <span className="cs-hint">Draw below. Or <button type="button" className="cs-linkbtn" onClick={() => { setMethod('typed'); setDrawnEmpty(false); }}>type your signature instead</button></span>
               )}
             </div>
           </div>
           {method === 'drawn' && <SignaturePad />}
         </form>
+        <span className="cs-vh" aria-live="polite">Total {total}</span>
         <div className="cs-btnrow">
           <button type="submit" form={FORM_ID} className="cs-btn cs-btn--primary cs-btn--lg">Sign for {total}</button>
           <details className="cs-decline" ref={declineRef}>
-            <summary className="cs-btn cs-btn--lg">Decline</summary>
+            <summary className="cs-btn cs-btn--lg" ref={summaryRef}>Decline</summary>
             <div role="group" aria-labelledby="cs-decline-h" className="cs-confirm">
               <h3 id="cs-decline-h"><span aria-hidden="true" style={{ color: 'var(--cs-red-ink)' }}>✗</span>Decline this proposal?</h3>
               <p>Declining is final for this version: the link stops working and nothing can be signed on it. {p.orgName} can send you a new version.</p>
@@ -105,7 +119,7 @@ export function SignForm(p: {
                 <span id="cs-reason-hint" className="cs-hint">Up to {p.reasonMax.toLocaleString('en-US')} characters. Kept in the proposal&apos;s audit trail.</span>
                 <div className="cs-actions">
                   <button type="submit" className="cs-btn cs-btn--danger">Decline this proposal</button>
-                  <button type="button" className="cs-btn" onClick={() => { if (declineRef.current) declineRef.current.open = false; }}>Keep reviewing</button>
+                  <button type="button" className="cs-btn" onClick={() => { if (declineRef.current) declineRef.current.open = false; summaryRef.current?.focus(); }}>Keep reviewing</button>
                 </div>
               </form>
             </div>

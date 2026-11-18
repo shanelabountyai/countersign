@@ -26,7 +26,9 @@ input,select,textarea,button{font:inherit;color:inherit}
 input[type=checkbox],input[type=radio]{accent-color:var(--cs-accent)}
 code{font-family:var(--cs-mono);font-size:.88em}
 .cs-skip{position:absolute;left:-9999px;top:0;background:var(--cs-surface);color:var(--cs-ink);padding:10px 14px;z-index:10}
-.cs-skip:focus{left:8px;top:8px}
+.cs-skip:focus{left:8px;top:8px;min-height:44px;display:inline-flex;align-items:center}
+form>fieldset{min-width:0}
+.cs-col>form{min-width:0}
 .cs-vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
@@ -85,6 +87,7 @@ select.cs-input{padding:0 8px}
 .cs-banner--ok{background:var(--cs-blue-wash);color:var(--cs-blue-ink)}
 .cs-banner__glyph{font-weight:700;flex:0 0 auto}
 .cs-banner p{margin:0}
+.cs-msg{margin:0;overflow-wrap:anywhere}.cs-msg::before{font-weight:700;flex:0 0 auto}.cs-msg--ok::before{content:"✓"}.cs-msg--bad::before{content:"✗"}
 
 /* ActionForm (template-owned) messages */
 form>p[role=alert]{margin:0 0 12px;display:flex;gap:8px;background:var(--cs-red-wash);color:var(--cs-red-ink);border-radius:10px;padding:12px 14px}
@@ -117,8 +120,8 @@ form>p[role=status]::before{content:"✓";font-weight:700}
 .cs-empty p{margin:0;color:var(--cs-ink-2)}
 .cs-steps{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
 .cs-steps li{display:flex;align-items:center;gap:10px;color:var(--cs-muted)}
-.cs-steps li.cs-done{color:var(--cs-ink)}
-.cs-steps li.cs-now{color:var(--cs-accent);font-weight:600}
+.cs-steps li.cs-step--done{color:var(--cs-ink)}
+.cs-steps li.cs-step--now{color:var(--cs-accent);font-weight:600}
 .cs-steps li .cs-when{margin-left:auto;font-size:13px;font-weight:400;color:var(--cs-muted);text-align:right}
 .cs-steps__g{width:18px;text-align:center}
 .cs-versions{margin:0;padding:0;list-style:none}
@@ -191,8 +194,8 @@ form>p[role=status]::before{content:"✓";font-weight:700}
 .cs-btnrow{display:flex;flex-direction:row-reverse;gap:10px;flex-wrap:wrap;align-items:flex-start;justify-content:flex-start}
 .cs-decline>summary{list-style:none}
 .cs-decline>summary::-webkit-details-marker{display:none}
-.cs-decline[open]{flex-basis:100%}
-.cs-decline[open]>summary{display:none}
+.cs-decline[open]{flex-basis:100%;display:flex;flex-direction:column;align-items:flex-end;gap:10px}
+.cs-decline[open]>.cs-confirm{align-self:stretch}
 .cs-confirm{border:1px solid var(--cs-red-line);border-left-width:4px;border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px;background:var(--cs-surface)}
 .cs-confirm h3{margin:0;font-size:18px;font-weight:600;display:flex;gap:8px;align-items:center}
 .cs-confirm p{margin:0;color:var(--cs-ink-2)}

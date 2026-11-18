@@ -2,7 +2,7 @@
 // with a server action: the page is public, and every 'use server' export must be session-guarded (INV-01).
 import { displayCents } from './money';
 import { BRAND_MARK_SVG } from '@/lib/ui/brand-mark';
-import { dayTime } from '@/lib/ui/format';
+import { dayTime, pillHtml, STATUS, type StatusKey } from '@/lib/ui/format';
 import { esc, page } from './sign-http';
 import { CHECK_LABELS, VERIFY_MAX_BYTES, type VerifyResult } from './verify';
 
@@ -47,7 +47,7 @@ a single different byte gives a different SHA-256.</p>${fingerprint(r)}`);
   }
   if (r.verdict === 'not_signed') {
     return card('bad', 'not_signed', '✗', 'Not verified: never signed', `<p>This file is a ${r.kind === 'certificate' ? 'certificate' : 'proposal'} Countersign stored, but that version was not signed (its status is
-<strong>${esc(r.status)}</strong>). A sent, replaced, declined or expired proposal is not a signed document.</p>${fingerprint(r)}`);
+${pillHtml((r.status in STATUS ? r.status : 'draft') as StatusKey)}). A sent, replaced, declined or expired proposal is not a signed document.</p>${fingerprint(r)}`);
   }
   const rec = r.record;
   const row = (dt: string, dd: string, wide = false) => `<div${wide ? ' class="cs-wide"' : ''}><dt>${dt}</dt><dd>${dd}</dd></div>`;
@@ -75,7 +75,7 @@ ${fingerprint(r)}${details}<h3>Re-derived from the stored record</h3>${checks}`)
   }
   if (r.verdict === 'verified') {
     return card('ok', 'verified', '✓', `Verified: this is the signed ${r.kind === 'certificate' ? 'completion certificate' : 'proposal'}`,
-      `<p>Your file is byte for byte the document that was signed, and the record behind it re-derives.</p>${fingerprint(r)}${details}<h3>Re-derived from the stored record</h3>${checks}`);
+      `<p>Your file is byte for byte the ${r.kind === 'certificate' ? 'completion certificate stored for the signed version' : 'proposal PDF that was signed'}, and the record behind it re-derives.</p>${fingerprint(r)}${details}<h3>Re-derived from the stored record</h3>${checks}`);
   }
   return card('bad', 'inconsistent', '✗', 'Not verified: the stored record is inconsistent', `<p>Your file matches a stored document, but the record behind it no longer re-derives. Contact the sender before relying on it.</p>
 ${fingerprint(r)}${details}<h3>Re-derived from the stored record</h3>${checks}`);

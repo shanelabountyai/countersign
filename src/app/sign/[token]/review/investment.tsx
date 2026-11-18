@@ -30,7 +30,7 @@ export function Investment({ lines, priced, chosen, onToggle, form }: {
           {lines.map((l) => {
             const r = byId.get(l.id)!;
             const on = chosen.has(l.id);
-            const sub = `${l.kind === 'fixed' ? KIND.fixed : `${qtyText(l)} × ${displayCents(l.unitPriceCents)}`}${l.taxRateBps > 0 ? ` · taxable ${formatPercent(l.taxRateBps)}%` : ''}`;
+            const sub = `${l.kind === 'fixed' ? `${KIND.fixed} · ${displayCents(l.unitPriceCents)}` : `${qtyText(l)} × ${displayCents(l.unitPriceCents)}`}${l.taxRateBps > 0 ? ` · taxable ${formatPercent(l.taxRateBps)}%` : ''}`;
             const name = (
               <span>
                 {l.optional && <strong style={{ fontWeight: 600 }}>Optional: </strong>}

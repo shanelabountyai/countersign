@@ -3,6 +3,7 @@ import { requireOrg } from '@/core/authz/guards';
 import { ActionForm } from '@/core/ui/action-form';
 import { getTemplate, toLineInput } from '@/lib/proposal/store';
 import { LineRows, SectionRows } from '../../proposals/editor-fields';
+import { EditorForm } from '../../proposals/editor-form';
 import { removeTemplate, saveTemplate } from '../actions';
 
 export const metadata = { title: 'Edit template' };
@@ -22,8 +23,7 @@ export default async function TemplateEditor({ params }: { params: Promise<{ org
             <span className="cs-banner__glyph" aria-hidden="true">i</span>
             <p>Saving changes this template only. Proposals already made from it keep their own copy.</p>
           </div>
-          <ActionForm action={saveTemplate.bind(null, ctx.slug)}>
-            <div className="cs-rows" style={{ gap: 18 }}>
+          <EditorForm action={saveTemplate.bind(null, ctx.slug)} footer={<button type="submit" className="cs-btn cs-btn--primary">Save template</button>}>
               <input type="hidden" name="id" value={t.id} />
               <section aria-labelledby="cs-details" className="cs-card">
                 <h2 id="cs-details">Details</h2>
@@ -31,9 +31,7 @@ export default async function TemplateEditor({ params }: { params: Promise<{ org
               </section>
               <SectionRows sections={t.sections} />
               <LineRows lines={t.lines.map(toLineInput)} />
-              <div><button type="submit" className="cs-btn cs-btn--primary">Save template</button></div>
-            </div>
-          </ActionForm>
+          </EditorForm>
           <details className="cs-danger" style={{ alignSelf: 'flex-start' }}>
             <summary>Delete this template…</summary>
             <div>

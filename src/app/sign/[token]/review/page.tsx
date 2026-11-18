@@ -83,7 +83,7 @@ export default async function Review({ params, searchParams }: { params: Promise
   );
   const docTerms = terms.map((s) => (
     <section key={s.id}>
-      <h2>{s.renderedTitle ? `Terms: ${s.renderedTitle}` : 'Terms'}</h2>
+      <h2>{!s.renderedTitle || /^terms\b/i.test(s.renderedTitle) ? s.renderedTitle || 'Terms' : `Terms: ${s.renderedTitle}`}</h2>
       <p className="cs-prose">{s.rendered}</p>
     </section>
   ));
@@ -107,8 +107,8 @@ export default async function Review({ params, searchParams }: { params: Promise
               </div>
             </div>
             <div className="cs-actions">
-              <a className="cs-btn cs-btn--blue" href={`${base}/pdf`}>Download the signed proposal (PDF)</a>
-              {view.certificate && <a className="cs-btn cs-btn--blue-ghost" href={`${base}/certificate`}>Download the completion certificate (PDF)</a>}
+              <a className="cs-btn cs-btn--blue" href={`${base}/pdf`}>Proposal PDF, as sent</a>
+              {view.certificate && <a className="cs-btn cs-btn--blue-ghost" href={`${base}/certificate`}>Completion certificate PDF (agreed total)</a>}
             </div>
           </section>
 
@@ -127,11 +127,12 @@ export default async function Review({ params, searchParams }: { params: Promise
             </dl>
             <section aria-labelledby="cs-ev" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <h3 id="cs-ev">Event log</h3>
-              <div className="cs-log" tabIndex={0} role="region" aria-labelledby="cs-ev">
+              <div className="cs-log" tabIndex={0} role="region" aria-label="Event log table, scrolls sideways">
                 <table>
+                  <caption className="cs-vh">From sending to signing; the certificate PDF also lists the draft history.</caption>
                   <thead><tr><th scope="col">Time (UTC)</th><th scope="col">Event</th><th scope="col">Hashed IP</th><th scope="col">Browser</th></tr></thead>
                   <tbody>
-                    {view.trail.map((e, i) => {
+                    {view.trail.filter((e) => e.action !== 'proposal.version.created' && e.action !== 'proposal.version.edited').map((e, i) => {
                       const sender = !e.ipHash && !e.userAgent;
                       return (
                         <tr key={i}>
@@ -175,7 +176,7 @@ export default async function Review({ params, searchParams }: { params: Promise
           consent={consentText({ title: v.title, version: v.number, pdfSha256: view.pdf.sha256 })}
           orgName={view.orgName}
           before={docHeadAt(true)}
-          after={<>{docTerms}<p style={{ margin: 0, fontFamily: 'var(--cs-sans)', fontSize: 15 }}><a href={`${base}/pdf`}>Download this proposal as a PDF</a> ({view.pdf.byteLength.toLocaleString('en-US')} bytes)</p></>}
+          after={<>{docTerms}<p style={{ margin: 0, fontFamily: 'var(--cs-sans)', fontSize: 15 }}><a className="cs-btn" href={`${base}/pdf`}>Download this proposal (PDF)</a></p></>}
           expires={dayTime(view.expiresAt)}
           error={message}
           reasonMax={DECLINE_REASON_MAX}

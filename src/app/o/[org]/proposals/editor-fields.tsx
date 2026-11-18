@@ -38,12 +38,12 @@ export function SectionRows({ sections, blanks = 2 }: { sections: readonly Secti
   );
 }
 
-export function LineRows({ lines, blanks = 3 }: { lines: readonly LineInput[]; blanks?: number }) {
+export function LineRows({ lines, blanks = 3, title = 'Line items' }: { lines: readonly LineInput[]; blanks?: number; title?: string }) {
   const rows: (LineInput | null)[] = [...lines, ...Array<null>(blanks).fill(null)];
   return (
     <section aria-labelledby="cs-lines" className="cs-card cs-card--flush">
       <div className="cs-card__head" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-        <h2 id="cs-lines">Line items</h2>
+        <h2 id="cs-lines">{title}</h2>
         <span className="cs-hint" style={{ fontSize: 14, color: 'var(--cs-ink-2)' }}>
           Amounts in dollars (12.50), quantities in units or hours (1.5), rates in percent (8.25). Optional items are add-ons the client can switch on. Blank rows add items.
         </span>
