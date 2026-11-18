@@ -3,48 +3,69 @@ import { requireOrg } from '@/core/authz/guards';
 import { ActionForm } from '@/core/ui/action-form';
 import { displayCents } from '@/lib/proposal/money';
 import { listProposals, listTemplates } from '@/lib/proposal/store';
+import { StatusPill } from '@/lib/ui/status-pill';
+import { day } from '@/lib/ui/format';
 import { addProposal } from './actions';
 
 export const metadata = { title: 'Proposals' };
 
+// docs/design/ProposalsList.dc.html
 export default async function Proposals({ params }: { params: Promise<{ org: string }> }) {
   const ctx = await requireOrg((await params).org);
   const [proposals, templates] = await Promise.all([listProposals(ctx), listTemplates(ctx)]);
+  const editor = ctx.role !== 'scorekeeper';
   return (
-    <main>
-      <h1>Proposals</h1>
-      {proposals.length === 0 ? <p>No proposals yet.</p> : (
-        <table>
-          <thead><tr><th>Title</th><th>Client</th><th>Version</th><th>Status</th><th>Total</th></tr></thead>
-          <tbody>
-            {proposals.map((p) => (
-              <tr key={p.id}>
-                <td><Link href={`/o/${ctx.slug}/proposals/${p.id}`}>{p.title}</Link></td>
-                <td>{p.clientName}</td>
-                <td>v{p.number}</td>
-                <td>{p.status}</td>
-                <td>{displayCents(p.totalCents)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {ctx.role !== 'scorekeeper' && (
-        <>
-          <h2>New proposal</h2>
-          <ActionForm action={addProposal.bind(null, ctx.slug)}>
-            <label>
-              Template{' '}
-              <select name="templateId" defaultValue="">
-                <option value="">Blank</option>
-                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </label>{' '}
-            <label>Title <input name="title" required maxLength={200} /></label>{' '}
-            <label>Client <input name="clientName" required maxLength={120} /></label>{' '}
-            <button type="submit">Create proposal</button>
-          </ActionForm>
-        </>
+    <main className="cs-app">
+      <div className="cs-col">
+        <div className="cs-pagehead"><h1>Proposals</h1></div>
+        <section aria-label="All proposals" className="cs-card cs-card--flush">
+          {proposals.length === 0 ? (
+            <div className="cs-empty">
+              <h2>No proposals yet</h2>
+              <p>{editor ? 'Start from a template or a blank page with the form beside this list. Nothing is sent until you press Send.' : 'Proposals your org creates will appear here.'}</p>
+            </div>
+          ) : (
+            <div className="cs-scroll">
+              <table className="cs-table" style={{ minWidth: 680 }}>
+                <thead><tr><th scope="col">Proposal</th><th scope="col">Client</th><th scope="col">Version</th><th scope="col">Status</th><th scope="col">Updated</th><th scope="col" className="cs-num">Total</th></tr></thead>
+                <tbody>
+                  {proposals.map((p) => (
+                    <tr key={p.id}>
+                      <td><Link href={`/o/${ctx.slug}/proposals/${p.id}`} style={{ fontWeight: 600 }}>{p.title}</Link></td>
+                      <td>{p.clientName}</td>
+                      <td>v{p.number}</td>
+                      <td><StatusPill status={p.status} /></td>
+                      <td>{day(p.updatedAt)}</td>
+                      <td className="cs-num">{displayCents(p.totalCents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+      {editor && (
+        <aside aria-label="New proposal" className="cs-side">
+          <div className="cs-card">
+            <h2>New proposal</h2>
+            <ActionForm action={addProposal.bind(null, ctx.slug)}>
+              <div className="cs-rows">
+                <label className="cs-label">
+                  Template
+                  <select name="templateId" defaultValue="" className="cs-input">
+                    <option value="">Blank</option>
+                    {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </label>
+                <label className="cs-label">Title <input name="title" required maxLength={200} className="cs-input" /></label>
+                <label className="cs-label">Client <input name="clientName" required maxLength={120} className="cs-input" /></label>
+                <button type="submit" className="cs-btn cs-btn--primary">Create proposal</button>
+                <span className="cs-hint">Creates version 1 as a draft. The template is copied; later template edits never change it.</span>
+              </div>
+            </ActionForm>
+          </div>
+        </aside>
       )}
     </main>
   );

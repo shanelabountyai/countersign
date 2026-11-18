@@ -10,6 +10,7 @@ import { Refused } from '@/core/errors';
 import { hit, LIMITS } from '@/core/rate-limit';
 import { normalizeSha256, sha256Hex } from './hash';
 import { certificateModel, priceVersionSelection, trailOf } from './certificate';
+import type { TrailRow } from './pdf';
 import { renderCertificatePdf } from './pdf';
 import { PDF_RENDERER_VERSION } from './renderer';
 import { SelectionError } from './selection';
@@ -69,8 +70,10 @@ export type LinkView =
       expiresAt: Date;
       version: ReturnType<typeof presentVersion>;
       pdf: { sha256: string; byteLength: number };
-      signature: { signerName: string; signedAt: Date; totalCents: number; selectedLineIds: string[] } | null;
-      certificate: { sha256: string; byteLength: number } | null;
+      signature: { signerName: string; method: string; signedAt: Date; totalCents: number; selectedLineIds: string[] } | null;
+      certificate: { sha256: string; byteLength: number; rendererVersion: string | null; orgName: string | null } | null;
+      /** A signed version's audit trail, for the on-screen certificate (the same rows the certificate PDF prints). Empty unless completed. */
+      trail: TrailRow[];
     };
 
 async function limit(meta: ClientMeta) {
@@ -93,9 +96,13 @@ async function view(token: string): Promise<LinkView> {
     if (a.code === 404) return a;
     if (a.code === 410) return { ...a, title: l.version.title, orgName: l.orgName };
     const [docs, sig] = await Promise.all([
-      tx.proposalDocument.findMany({ where: { versionId: l.version.id, orgId: link.orgId }, select: { kind: true, sha256: true, byteLength: true } }),
-      tx.proposalSignature.findUnique({ where: { versionId: l.version.id }, select: { signerName: true, signedAt: true, totalCents: true, selectedLineIds: true } }),
+      tx.proposalDocument.findMany({ where: { versionId: l.version.id, orgId: link.orgId }, select: { kind: true, sha256: true, byteLength: true, rendererVersion: true, orgName: true } }),
+      tx.proposalSignature.findUnique({ where: { versionId: l.version.id }, select: { signerName: true, method: true, signedAt: true, totalCents: true, selectedLineIds: true } }),
     ]);
+    // Read-only, for the signed page's certificate view (design pass, D-53): the rows the certificate PDF already lists.
+    const events = a.state === 'completed'
+      ? await tx.auditEvent.findMany({ where: { orgId: link.orgId, targetType: 'proposalVersion', targetId: l.version.id }, orderBy: { id: 'asc' } })
+      : [];
     const pdf = docs.find((d) => d.kind === 'proposal');
     if (!pdf) return { code: 404 } as const; // a sent version always has one (D-35)
     const cert = docs.find((d) => d.kind === 'certificate') ?? null;
@@ -107,7 +114,8 @@ async function view(token: string): Promise<LinkView> {
       version: presentVersion(l.version),
       pdf: { sha256: pdf.sha256, byteLength: pdf.byteLength },
       signature: sig && { ...sig, totalCents: Number(sig.totalCents) },
-      certificate: cert && { sha256: cert.sha256, byteLength: cert.byteLength },
+      certificate: cert && { sha256: cert.sha256, byteLength: cert.byteLength, rendererVersion: cert.rendererVersion, orgName: cert.orgName },
+      trail: trailOf(events),
     };
   }, { atomic: false });
 }
