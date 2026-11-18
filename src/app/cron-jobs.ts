@@ -1,5 +1,5 @@
 import { drainOutbox, sweepOutbox } from '@/modules/notifications/outbox'; // notifications
-import { sweepSsoStates } from '@/modules/sso/hooks'; // sso
+import { recheckSsoDomains, sweepSsoStates } from '@/modules/sso/hooks'; // sso
 import { cronWebhooks } from '@/modules/apikeys/webhooks'; // apikeys
 import { expireLapsed } from '@/lib/proposal/signing';
 
@@ -9,6 +9,7 @@ export async function cronJobs(): Promise<Record<string, unknown>> {
   const jobs: Record<string, unknown> = {};
   jobs.outbox = { ...(await drainOutbox()), swept: await sweepOutbox() }; // notifications
   jobs.ssoStates = await sweepSsoStates(); // sso
+  jobs.ssoDomains = await recheckSsoDomains(); // sso
   jobs.webhooks = await cronWebhooks(); // apikeys
   jobs.countersignExpire = await expireLapsed(); // Countersign D-36: sent proposals whose signing links lapsed
   return jobs;
