@@ -32,6 +32,25 @@ Each file is a self-contained Design Component: HTML with inline styles, `{{hole
 
 Design each gap as a new `docs/design/<Name>.dc.html` in the same look before building it.
 
+### Gap artboards added 2026-11-18 (design pass, unattended run)
+
+Same tokens, same format (inline styles, `renderVals()` sample data as `[PLACEHOLDERS]`, word → glyph → colour for every
+status). Added to `canvas.json`; not yet on the Claude Design canvas.
+
+| File | Screen | Covers |
+| --- | --- | --- |
+| `SignLanding.dc.html` | Client: open the signing link | GET `/sign/<token>` 200 landing; the "Open proposal" POST (D-33). Found in the code; not in the list above |
+| `DeclineConfirm.dc.html` | Client: decline, with confirmation | Decline confirmation (listed gap) |
+| `LinkNotices.dc.html` | Client: link notices | 410 declined / expired / replaced / closed, 404, 429. Found in the code; Superseded covers one 410 only |
+| `Verify.dc.html` | Public verify page | Upload form and every verdict (listed gap) |
+| `ProposalsList.dc.html` | Sender: proposals list | Listed gap, with the empty state |
+| `TemplatesList.dc.html` | Sender: templates list | Listed gap, with the sample template (D-43) |
+| `TemplateEditor.dc.html` | Sender: template editor | Listed gap; its section and line rows are also the proposal editor's edit rows |
+
+Status set used everywhere (word, glyph, colours on white): Draft ✎ `#3E434D/#EEEEEA`; Sent ↗ `#0F5E63/#E3F1F1`;
+Viewed ● `#1D4F91/#E6EEF9`; Signed ✓ `#FFFFFF/#1D4F91`; Declined ✗ `#8A1F11/#FBE9E7`; Expired ⌛ and Superseded ↻
+`#6B4100/#FBF0DA`. Red (`#8A1F11`, border `#B42318`) is new: the original artboards had no failure state.
+
 ## Placeholders
 
 [YOUR TERMS], [SHA-256 …], [HASH], [PINNED VERSION] and [SENDER EMAIL] are placeholders; LI-2026-014 / Northwind Outfitters / Jordan Avery are sample data.

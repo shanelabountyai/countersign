@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Decline, with confirmation</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Source+Serif+4:opsz,wght@8..60,600&amp;family=Space+Grotesk:wght@600;700&amp;display=swap">
+<style>
+body{margin:0;background:#EFEFEA}
+a{color:#0F5E63}a:hover{color:#0A4347}
+</style>
+</helmet>
+<!-- Gap design (2026-11-18). Top: the sign panel of Main.dc.html after "Decline" is pressed. It opens in place (a
+     disclosure, so it works without JavaScript); nothing is recorded until "Decline this proposal" is pressed.
+     Bottom: what the client sees next. Declining makes the link answer 410 (D-13), so the result is the
+     "declined" notice from LinkNotices.dc.html, worded for the person who just declined. -->
+<div style="min-height: 100%; background: #EFEFEA; color: #16181D; font-family: Inter, system-ui, sans-serif; font-size: 16px; line-height: 1.5;">
+<main style="max-width: 880px; margin: 0 auto; padding: 32px 24px 64px; display: flex; flex-direction: column; gap: 32px;">
+
+<section aria-labelledby="sg" style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 12px; padding: 28px; display: flex; flex-direction: column; gap: 18px;">
+<h2 id="sg" style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 600;">Sign this proposal</h2>
+<p style="margin: 0; color: #565B66; font-size: 15px;">[Consent, name and signature as in Main.dc.html]</p>
+<div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end;">
+<button type="button" aria-expanded="{{open}}" onClick="{{toggle}}" style="min-height: 52px; padding: 0 18px; border-radius: 10px; border: 1px solid #8A8F99; background: #FFFFFF; color: #16181D; font: inherit; font-weight: 600; cursor: pointer;">Decline</button>
+<button type="button" style="min-height: 52px; padding: 0 24px; border-radius: 10px; border: none; background: #0F5E63; color: #FFFFFF; font: inherit; font-weight: 600;">Sign for [TOTAL]</button>
+</div>
+<sc-if value="{{open}}" hint-placeholder-val="{{true}}">
+<div role="group" aria-labelledby="dh" style="border: 1px solid #B42318; border-left-width: 4px; border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px; background: #FFFFFF;">
+<h3 id="dh" style="margin: 0; font-size: 18px; font-weight: 600; display: flex; gap: 8px; align-items: center;"><span aria-hidden="true" style="color: #8A1F11;">✗</span>Decline this proposal?</h3>
+<p style="margin: 0; color: #3E434D;">Declining is final for this version: the link stops working and nothing can be signed on it. [ORG NAME] can send you a new version.</p>
+<label for="rs" style="font-weight: 600; font-size: 15px;">Reason for [ORG NAME] (optional)</label>
+<textarea id="rs" rows="3" maxlength="1000" style="box-sizing: border-box; width: 100%; border: 1px solid #8A8F99; border-radius: 10px; padding: 10px 12px; font: inherit;"></textarea>
+<span style="font-size: 13px; color: #565B66;">Up to 1,000 characters. Kept in the proposal's audit trail.</span>
+<div style="display: flex; gap: 10px; flex-wrap: wrap;">
+<button type="button" style="min-height: 48px; padding: 0 18px; border-radius: 10px; border: none; background: #8A1F11; color: #FFFFFF; font: inherit; font-weight: 600;">Decline this proposal</button>
+<button type="button" onClick="{{toggle}}" style="min-height: 48px; padding: 0 18px; border-radius: 10px; border: 1px solid #8A8F99; background: #FFFFFF; color: #16181D; font: inherit; font-weight: 600;">Keep reviewing</button>
+</div>
+</div>
+</sc-if>
+</section>
+
+<section style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 12px; padding: 32px; display: flex; flex-direction: column; gap: 16px;">
+<span style="align-self: flex-start; display: inline-flex; gap: 6px; background: #FBE9E7; color: #8A1F11; border-radius: 999px; padding: 4px 12px; font-weight: 600; font-size: 14px;"><span aria-hidden="true">✗</span>Declined</span>
+<h1 style="margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 30px; font-weight: 600; line-height: 1.25;">[PROPOSAL TITLE] was declined.</h1>
+<p style="margin: 0; color: #3E434D;">Nothing was signed, and this link no longer works. If that was a mistake, contact [ORG NAME] and ask for a new version.</p>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { open: true }; }
+  renderVals() {
+    return { open: this.state.open, toggle: () => this.setState({ open: !this.state.open }) };
+  }
+}
+</script>
+</body>
+</html>

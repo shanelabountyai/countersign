@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open proposal (signing link landing)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Source+Serif+4:opsz,wght@8..60,600&amp;family=Space+Grotesk:wght@600;700&amp;display=swap">
+<style>
+body{margin:0;background:#EFEFEA}
+a{color:#0F5E63}a:hover{color:#0A4347}
+</style>
+</helmet>
+<!-- Gap design (2026-11-18): GET /sign/<token> answers this page with 200 (D-30). Opening is an explicit POST so mail
+     scanners never record a view (D-33). No price breakdown and no hash here (owner call: hash on the certificate only). -->
+<div style="min-height: 100%; background: #EFEFEA; color: #16181D; font-family: Inter, system-ui, sans-serif; font-size: 16px; line-height: 1.5;">
+<div role="note" style="background: #16181D; color: #E6E7E3; font-size: 14px;">
+<div style="max-width: 880px; margin: 0 auto; padding: 10px 24px; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between;">
+<span>Sent to you by <strong style="color: #FFFFFF;">{{org}}</strong> · Version {{version}}</span>
+<span>Demo: not a legally vetted e-signature product</span>
+</div>
+</div>
+<main style="max-width: 640px; margin: 0 auto; padding: 72px 24px; display: flex; flex-direction: column; gap: 20px;">
+<div style="display: flex; align-items: center; gap: 10px;">
+<span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 7px; background: #16181D; color: #7FD1CF; display: inline-flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700;">{{mono}}</span>
+<span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px;">{{org}}</span>
+</div>
+<section aria-labelledby="t" style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 12px; padding: 32px; display: flex; flex-direction: column; gap: 16px;">
+<span style="font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #565B66;">Proposal for {{client}}</span>
+<h1 id="t" style="margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 30px; font-weight: 600; line-height: 1.25;">{{title}}</h1>
+<dl style="margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; font-size: 15px;">
+<div><dt style="color: #565B66; font-size: 13px; font-weight: 600;">Total (default add-ons)</dt><dd style="margin: 0; font-weight: 600;">{{total}}</dd></div>
+<div><dt style="color: #565B66; font-size: 13px; font-weight: 600;">Link valid until</dt><dd style="margin: 0;">{{expires}}</dd></div>
+</dl>
+<form style="margin: 0;"><button type="button" style="min-height: 52px; padding: 0 24px; border-radius: 10px; border: none; background: #0F5E63; color: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer;">Open proposal</button></form>
+<p style="margin: 0; font-size: 14px; color: #565B66;">Opening the proposal is recorded in its audit trail with the time, a hashed IP address and your browser.</p>
+</section>
+<p style="margin: 0; font-size: 13px; color: #565B66;">Demo: not a legally vetted e-signature product.</p>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { org: '[ORG NAME]', mono: '[I]', version: '[N]', client: '[CLIENT]', title: '[PROPOSAL TITLE]', total: '[TOTAL]', expires: '[LINK EXPIRY, UTC]' };
+  }
+}
+</script>
+</body>
+</html>
