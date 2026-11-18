@@ -1,5 +1,18 @@
 # NEXT
 
+## ▶ 2026-11-18: design pass PR open (branch `design/impl`): Claude Design artboards built, 7 gap screens, design/UX/a11y review fixed
+Built every artboard in `docs/design/` (5 original + 7 gap designs added this run) into the real pages on the existing
+stack: one shared stylesheet (`src/lib/ui/theme.ts`), no UI library, no web font, light only. No business logic,
+pricing, status rule, schema or route contract changed; `openLink` also reads the signed version's audit rows for the
+on-screen certificate (D-53). Three independent reviews (design fidelity, UX, accessibility) ran against the production
+build; must-fix and accepted should-fix findings are fixed (D-62 to D-64, PRD "Design, UX and accessibility
+requirements" DUX-01 to DUX-11); the rest are listed in D-65 and the PR. Local gate (Postgres 16 and stub Prisma engine
+stand-ins, D-06): lint, typecheck, vitest 805 passed / 30 skipped, e2e 22 passed with axe 0 violations on every
+Countersign page, check-modules OK. **Shane's hand steps:** rule on D-54 (consent wording, which names the hash, behind
+a disclosure on the signing page) and D-48 (Lab Intelligence not seeded as a demo org); add the 7 gap artboards to the
+Design canvas (https://claude.ai/artifact/Cn8tm6RYfaQbyHkw5jJbpa) if wanted; review the PR; merge or not.
+Left open: crowded sender header at 390 px (D-65), decline reason not shown to the sender, empty-merge-field warning.
+
 ## ▶ 2026-11-17: v1.7.0 PR open (branch `security/v1.7.0`): A-04, A-08 (owner decisions 2026-11-17)
 Webhook endpoints are disabled with their creator's membership; a demotion below `apikeys.manage` revokes keys and disables
 endpoints. One migration (guarded; backfills creators from the audit log and disables orphans), one breaking change
