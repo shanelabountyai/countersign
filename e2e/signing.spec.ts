@@ -23,7 +23,8 @@ async function sendProposal(page: Page, title: string) {
   await page.getByLabel('Title').fill(title);
   await page.getByLabel('Client').fill('Globex');
   await page.getByRole('button', { name: 'Create proposal' }).click();
-  await expect(page.getByRole('heading', { name: new RegExp(`${title} v1 · draft`) })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+  await expect(page.getByTestId('version-line')).toHaveText(/Version 1.*Draft/);
   await page.getByLabel('Title', { exact: true }).nth(1).fill('Scope');
   await page.getByLabel('Text').first().fill('Brand refresh for {{client}}.');
   await page.getByLabel('Line 1 description').fill('Design');
@@ -53,11 +54,10 @@ test('send → open → add-on → typed signature → downloads match the recor
   await client.getByRole('button', { name: 'Open proposal' }).click();
   await expect(client.getByText('Brand refresh for Globex.')).toBeVisible();
   await expect(client.getByTestId('total')).toHaveText('$2,706.25');
-  await client.getByLabel(/Extra page \(optional\)/).check();
+  await client.getByLabel(/Optional: Extra page/).check();
   await expect(client.getByTestId('total')).toHaveText('$3,506.25'); // the add-on is untaxed: 2,706.25 + 800
   await client.getByLabel('Full name').fill('Hank Scorpio');
-  await client.getByLabel('Type your signature').fill('Hank Scorpio');
-  await client.getByRole('checkbox', { name: /I agree to do business electronically/ }).check();
+  await client.getByRole('checkbox', { name: /I agree to use electronic records and signatures/ }).check();
   await client.getByRole('button', { name: 'Sign for $3,506.25' }).click();
   await expect(client.getByRole('heading', { name: 'Signed. Thank you.' })).toBeVisible();
 
@@ -85,13 +85,17 @@ test('a drawn signature; an edit after send makes the old link HTTP 410', async 
   await client.goto(first.path);
   await client.getByRole('button', { name: 'Open proposal' }).click();
   await client.getByLabel('Full name').fill('Hank Scorpio');
-  await client.getByRole('radio', { name: 'Draw' }).check();
+  await expect(async () => { // a click before hydration does nothing; retry until the pad is there
+    const draw = client.getByRole('button', { name: 'draw your signature instead' });
+    if (await draw.isVisible()) await draw.click();
+    await expect(client.getByTestId('signature-pad')).toBeVisible({ timeout: 1000 });
+  }).toPass();
   const box = (await client.getByTestId('signature-pad').boundingBox())!;
   await client.mouse.move(box.x + 20, box.y + box.height * 0.7);
   await client.mouse.down();
   for (const [fx, fy] of [[0.2, 0.2], [0.4, 0.8], [0.6, 0.3], [0.85, 0.6]] as const) await client.mouse.move(box.x + box.width * fx, box.y + box.height * fy, { steps: 8 });
   await client.mouse.up();
-  await client.getByRole('checkbox', { name: /I agree to do business electronically/ }).check();
+  await client.getByRole('checkbox', { name: /I agree to use electronic records and signatures/ }).check();
   await client.getByRole('button', { name: /^Sign for/ }).click();
   await expect(client.getByRole('heading', { name: 'Signed. Thank you.' })).toBeVisible();
   const { rows } = await db.query<{ method: string; data: string }>(`SELECT s.method, s."signatureData" AS data FROM "ProposalSignature" s JOIN "ProposalVersion" v ON v.id = s."versionId" WHERE v."proposalId" = $1`, [first.id]);

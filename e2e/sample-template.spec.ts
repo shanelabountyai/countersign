@@ -17,7 +17,7 @@ test('add the sample template → proposal from it shows the SAMPLE section and 
   await page.getByRole('link', { name: 'Acme Studio' }).click();
   await page.getByRole('navigation').getByRole('link', { name: 'Templates' }).click();
   await page.getByRole('button', { name: 'Add the sample template' }).click();
-  await expect(page.getByRole('heading', { name: 'SAMPLE: Lab Intelligence AI adoption assessment' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'SAMPLE: Lab Intelligence AI adoption assessment' })).toBeVisible(); // level 1: the list page names it in an h2
   const templateId = page.url().split('/').pop()!;
   await expect(page.getByLabel('Text').first()).toHaveValue(/This is a sample template/);
 
@@ -27,7 +27,8 @@ test('add the sample template → proposal from it shows the SAMPLE section and 
   await page.getByLabel('Title').fill(`AI assessment ${Date.now()}`);
   await page.getByLabel('Client').fill('Example Client');
   await page.getByRole('button', { name: 'Create proposal' }).click();
-  await expect(page.getByRole('heading', { name: /AI assessment \d+ v1 · draft/ })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /AI assessment \d+/ })).toBeVisible();
+  await expect(page.getByTestId('version-line')).toHaveText(/Version 1.*Draft/);
   await expect(page.getByLabel('Text').first()).toHaveValue(/This is a sample template/);
-  await expect(page.getByRole('row', { name: /^Total/ })).toContainText('$0.00');
+  await expect(page.getByTestId('total')).toHaveText('$0.00');
 });
