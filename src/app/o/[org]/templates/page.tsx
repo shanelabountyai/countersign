@@ -48,7 +48,7 @@ export default async function Templates({ params }: { params: Promise<{ org: str
             </ActionForm>
           </div>
           <section aria-labelledby="cs-sample" className="cs-card">
-            <span className="cs-pill cs-pill--warn" style={{ alignSelf: 'flex-start' }}><span aria-hidden="true">◐</span>Sample</span>
+            <span className="cs-pill cs-pill--warn" style={{ alignSelf: 'flex-start' }}><span className="cs-half" aria-hidden="true" />Sample</span>
             <h2 id="cs-sample">{SAMPLE_TEMPLATE_NAME}</h2>
             <p style={{ margin: 0, color: 'var(--cs-ink-2)' }}>
               An editable starting point for an AI adoption assessment. It is a sample: every price is a $0.00 placeholder and it names no client. Each click adds a new copy you can edit.

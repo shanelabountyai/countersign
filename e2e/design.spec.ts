@@ -200,3 +200,69 @@ test('review fixes: send keeps the link and refreshes the page; a refused save k
     await expect(decline).toBeFocused({ timeout: 1000 });
   }).toPass();
 });
+
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+test('follow-ups: org brand on client pages, empty merge-field warning, decline reason for the sender, stale POST lands on the notice', async ({ page, browser }) => {
+  await signIn(page);
+  // D-66: Settings → Brand. A too-light colour is refused with its ratio; a dark one and a PNG logo are saved.
+  await page.getByRole('navigation').getByRole('link', { name: 'Brand' }).click();
+  await page.getByLabel('Accent colour (hex)').fill('#7FD1CF');
+  await page.getByRole('button', { name: 'Save brand' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'too light' })).toBeVisible();
+  await page.getByLabel('Accent colour (hex)').fill('#1D4F91');
+  await page.getByLabel(/^Logo/).setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: Buffer.from(PNG_1PX, 'base64') });
+  await expect(page.getByAltText('Logo preview')).toBeVisible();
+  await page.getByRole('button', { name: 'Save brand' }).click();
+  await expect(page.getByRole('status')).toHaveText(/Brand saved/);
+  await axe(page, 'brand settings');
+
+  // D-70: a used merge field that is empty is flagged before Send.
+  await page.getByRole('navigation').getByRole('link', { name: 'Proposals' }).click();
+  await page.waitForURL(/\/proposals$/);
+  const title = `Followups ${Date.now()}`;
+  await page.getByLabel('Title').fill(title);
+  await page.getByLabel('Client').fill('Globex');
+  await page.getByRole('button', { name: 'Create proposal' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+  await page.getByLabel('Title', { exact: true }).nth(1).fill('Scope');
+  await page.getByLabel('Text').first().fill('We will deliver {{scope}} for {{client}}.');
+  await page.getByLabel('Line 1 description').fill('Design');
+  await page.getByLabel('Line 1 unit price').fill('100');
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByRole('status')).toHaveText('Draft saved.');
+  await page.reload();
+  await expect(page.getByTestId('empty-merge-warning')).toContainText('{{scope}}');
+  await expect(page.getByTestId('empty-merge-warning')).not.toContainText('{{client}}');
+  await page.getByRole('button', { name: 'Send version 1' }).click();
+  const path = new URL(await page.getByLabel('Signing link (shown once)').inputValue()).pathname;
+
+  // The client sees the org's logo and accent.
+  const client = await (await browser.newContext()).newPage();
+  await client.goto(path);
+  await expect(client.locator('img.cs-logo')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  expect(await client.locator('.cs-client').evaluate((el) => getComputedStyle(el).getPropertyValue('--cs-accent').trim())).toBe('#1d4f91');
+  await axe(client, 'branded landing');
+  await client.getByRole('button', { name: 'Open proposal' }).click();
+  await expect(client.locator('img.cs-logo')).toBeVisible();
+  await axe(client, 'branded review');
+
+  // A second tab of the same page goes stale when the first declines; its sign POST lands on the branded 410 notice.
+  const stale = await client.context().newPage();
+  await stale.goto(`${path}/review`);
+  await client.getByText('Decline', { exact: true }).click();
+  await client.getByLabel(/Reason for Acme Studio/).fill('Budget moved to next year.');
+  await client.getByRole('button', { name: 'Decline this proposal' }).click();
+  await expect(client.getByRole('heading', { level: 1 })).toContainText('was declined');
+  await stale.getByLabel('Full name').fill('Hank Scorpio');
+  await stale.getByRole('checkbox', { name: /I agree to use electronic records and signatures/ }).check();
+  const [res] = await Promise.all([stale.waitForResponse((r) => r.request().method() === 'GET' && new URL(r.url()).pathname === path), stale.getByRole('button', { name: /^Sign for/ }).click()]);
+  expect(res.status()).toBe(410);
+  await expect(stale.getByRole('heading', { level: 1 })).toContainText('was declined');
+  await expect(stale.locator('img.cs-logo')).toBeVisible();
+
+  // D-69: the sender sees the decline and its reason.
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Declined by the client' })).toBeVisible();
+  await expect(page.getByText('Budget moved to next year.')).toBeVisible();
+});

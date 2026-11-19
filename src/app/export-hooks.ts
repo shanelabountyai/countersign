@@ -35,6 +35,13 @@ export const exportTables: readonly ExportTable[] = [
       (await tx.proposalDocument.findMany({ where: { orgId }, select: { id: true, versionId: true, kind: true, sha256: true, byteLength: true, bytes: true, createdAt: true } }))
         .map(({ bytes, ...d }) => ({ ...d, bytesBase64: Buffer.from(bytes).toString('base64') })),
   },
+  // D-66: the org's brand (accent and logo), the logo as base64 like the stored PDFs.
+  {
+    name: 'OrgBrand',
+    rows: async (tx, orgId) =>
+      (await tx.orgBrand.findMany({ where: { orgId }, select: { orgId: true, accentHex: true, logoType: true, logoSha256: true, logoBytes: true, updatedAt: true } }))
+        .map(({ logoBytes, ...b }) => ({ ...b, logoBase64: logoBytes ? Buffer.from(logoBytes).toString('base64') : null })),
+  },
   { name: 'SigningLink', rows: (tx, orgId) => tx.signingLink.findMany({ where: { orgId }, select: { id: true, versionId: true, createdById: true, expiresAt: true, revokedAt: true, createdAt: true } }) },
   {
     name: 'ProposalSignature',

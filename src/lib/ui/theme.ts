@@ -86,6 +86,10 @@ select.cs-input{padding:0 8px}
 .cs-banner--bad{background:var(--cs-red-wash);color:var(--cs-red-ink)}
 .cs-banner--ok{background:var(--cs-blue-wash);color:var(--cs-blue-ink)}
 .cs-banner__glyph{font-weight:700;flex:0 0 auto}
+/* half-filled circle, drawn (the ◐ glyph is missing from some system fonts) */
+.cs-half{display:inline-block;width:.9em;height:.9em;border-radius:50%;border:2px solid currentColor;background:linear-gradient(90deg,currentColor 50%,transparent 50%);vertical-align:-.1em;flex:0 0 auto}
+.cs-banner__glyph.cs-half{margin-top:.3em}
+.cs-invest th.cs-num,.cs-invest td.cs-num{width:8.5em}
 .cs-banner p{margin:0}
 .cs-msg{margin:0;overflow-wrap:anywhere}.cs-msg::before{font-weight:700;flex:0 0 auto}.cs-msg--ok::before{content:"✓"}.cs-msg--bad::before{content:"✗"}
 
@@ -114,6 +118,7 @@ form>p[role=status]::before{content:"✓";font-weight:700}
 .cs-pagehead h1,.cs-h1{margin:0;font-family:var(--cs-display);font-size:26px;font-weight:700;line-height:1.2}
 .cs-meta{font-size:13px;color:var(--cs-muted)}
 .cs-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cs-onlynarrow{display:none!important}
 .cs-back{font-size:14px;font-weight:600;min-height:44px;display:inline-flex;align-items:center;align-self:flex-start}
 .cs-empty{padding:32px 24px;display:flex;flex-direction:column;gap:8px}
 .cs-empty h2{margin:0;font-size:18px}
@@ -142,6 +147,14 @@ form>p[role=status]::before{content:"✓";font-weight:700}
 .cs-doc-preview p{margin:0;white-space:pre-wrap}
 @media (max-width:640px){
 .cs-top__in,.cs-app{padding-left:16px;padding-right:16px}
+.cs-nav__more{flex-wrap:nowrap;overflow-x:auto;max-width:100%;white-space:nowrap;gap:0 16px;scrollbar-width:thin}
+.cs-who{font-size:13px}
+.cs-stack thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.cs-stack,.cs-stack tbody,.cs-stack tr,.cs-stack td{display:block;min-width:0!important;width:100%}
+.cs-stack tr{padding:8px 16px;border-top:1px solid var(--cs-line-soft)}
+.cs-stack td{border:0!important;padding:2px 0!important;text-align:left!important}
+.cs-stack td[data-label]::before{content:attr(data-label) ": ";color:var(--cs-muted);font-size:13px}
+.cs-onlynarrow{display:inline-flex!important}
 .cs-secrow{grid-template-columns:1fr 1fr}
 .cs-secrow .cs-title{grid-column:1/-1}
 }
@@ -155,6 +168,7 @@ form>p[role=status]::before{content:"✓";font-weight:700}
 .cs-client__main--narrow{max-width:640px;padding-top:56px;gap:20px}
 .cs-orgmark{display:flex;align-items:center;gap:10px;font-family:var(--cs-display);font-weight:700;font-size:18px}
 .cs-mono{width:28px;height:28px;border-radius:7px;background:var(--cs-ink);color:var(--cs-mark);display:inline-flex;align-items:center;justify-content:center;font-family:var(--cs-display);font-weight:700;font-size:15px;flex:0 0 auto}
+.cs-logo{height:30px;width:auto;max-width:160px;object-fit:contain;flex:0 0 auto}
 .cs-mono--lg{width:30px;height:30px;font-size:16px}
 .cs-doc{background:var(--cs-surface);border:1px solid var(--cs-line);border-radius:6px;padding:56px 64px;display:flex;flex-direction:column;gap:28px;font-family:var(--cs-serif);font-size:18px;line-height:1.6}
 .cs-doc__head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:2px solid var(--cs-ink);padding-bottom:20px}

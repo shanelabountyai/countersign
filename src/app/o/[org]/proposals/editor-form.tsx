@@ -24,12 +24,13 @@ function Message({ m, focusKey }: { m: { kind: 'error' | 'notice'; text: string 
 }
 
 /** A save form that keeps its fields on a refusal; the message sits just above the submit row (`footer`). */
-export function EditorForm({ action, children, footer }: { action: (form: FormData) => Promise<Result>; children: React.ReactNode; footer: React.ReactNode }) {
+export function EditorForm({ action, children, footer, id }: { action: (form: FormData) => Promise<Result>; children: React.ReactNode; footer: React.ReactNode; id?: string }) {
   const [m, setM] = useState<ReturnType<typeof msgOf>>(null);
   const [n, setN] = useState(0);
   const [pending, start] = useTransition();
   return (
     <form
+      id={id}
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);

@@ -60,6 +60,7 @@ export async function seedApp(org: { orgId: string; userId: string }, key: 'a' |
   const cert = Buffer.from(`%PDF-1.4 fixture certificate ${key}\n`);
   await db.proposalDocument.create({ data: { orgId, versionId: sv.id, kind: 'certificate', sha256: createHash('sha256').update(cert).digest('hex'), byteLength: cert.length, bytes: cert } });
 
+  await db.orgBrand.create({ data: { orgId, accentHex: '#0f5e63' } }); // D-66: one row so INV-29 has a brand to scope
   return { template: template.id, proposal: proposal.id, signedProposal: signed.id, signingLink: link.id };
 }
 

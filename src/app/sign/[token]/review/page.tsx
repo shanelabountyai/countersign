@@ -7,6 +7,7 @@ import { priceVersionSelection } from '@/lib/proposal/certificate';
 import { consentText } from '@/lib/proposal/signature';
 import { ClientRefusal, DECLINE_REASON_MAX, openLink, type RefusalCode } from '@/lib/proposal/signing';
 import { OrgMark } from '@/lib/ui/brand-mark';
+import { accentVars, logoSrc } from '@/lib/ui/brand';
 import { browserLabel, day, dayTime, eventLabel, monogram, shortHash } from '@/lib/ui/format';
 import { Investment, type ClientLine } from './investment';
 import { SignForm } from './sign-form';
@@ -66,7 +67,7 @@ export default async function Review({ params, searchParams }: { params: Promise
   const docHeadAt = (top: boolean) => (
     <>
       <header className="cs-doc__head">
-        <OrgMark name={view.orgName} mono={mono} large />
+        <OrgMark name={view.orgName} mono={mono} logo={logoSrc(view.brand)} large />
         <div className="cs-doc__ref">Proposal · Version {v.number}</div>
       </header>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -88,6 +89,8 @@ export default async function Review({ params, searchParams }: { params: Promise
     </section>
   ));
 
+  const brandStyle = (view.brand.accentHex ? accentVars(view.brand.accentHex) : undefined) as React.CSSProperties | undefined;
+
   if (view.state === 'completed' && view.signature) {
     const sig = view.signature;
     const chosen = new Set(sig.selectedLineIds);
@@ -95,7 +98,7 @@ export default async function Review({ params, searchParams }: { params: Promise
     const addOns = v.lines.filter((l) => l.optional);
     const chosenNames = addOns.filter((l) => chosen.has(l.id)).map((l) => l.description);
     return (
-      <div className="cs-client">
+      <div className="cs-client" style={brandStyle}>
         <header className="cs-topnote"><div><span>Signed with <strong>{view.orgName}</strong> · Version {v.number}</span><span>{DEMO_NOTE}</span></div></header>
         <main className="cs-client__main">
           <section aria-labelledby="cs-done-h" className="cs-done">
@@ -163,7 +166,7 @@ export default async function Review({ params, searchParams }: { params: Promise
   }
 
   return (
-    <div className="cs-client">
+    <div className="cs-client" style={brandStyle}>
       <header className="cs-topnote"><div><span>Sent to you by <strong>{view.orgName}</strong> · Version {v.number} · Link valid until {day(view.expiresAt)}</span><span>{DEMO_NOTE}</span></div></header>
       <main className="cs-client__main">
         <SignForm
