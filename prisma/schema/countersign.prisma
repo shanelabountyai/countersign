@@ -228,3 +228,15 @@ model ProposalSignature {
 
   @@index([orgId])
 }
+
+// Per-org branding for client pages (D-66): an accent colour checked for contrast and a small PNG/JPEG logo, both
+// optional. One row per org. Not part of any signed document: the PDFs print the org name only (D-46).
+model OrgBrand {
+  orgId      String   @id @db.Uuid
+  org        Org      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  accentHex  String? // "#rrggbb", ≥ 4.5:1 against white and #EFEFEA (accentProblem in src/lib/ui/brand.ts)
+  logoType   String? // image/png | image/jpeg, sniffed from the bytes
+  logoBytes  Bytes? // ≤ 100 KB
+  logoSha256 String?
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+}

@@ -106,6 +106,7 @@ model Org {
   webhookDeliveries WebhookDelivery[] // apikeys
   templates      Template[] // app
   proposals      Proposal[] // app
+  brand          OrgBrand? // app
 }
 
 model Membership {

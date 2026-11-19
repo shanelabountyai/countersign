@@ -3,6 +3,7 @@
 import { clientIp, isSameOrigin } from '@/core/http';
 import { THEME_CSS } from '@/lib/ui/theme';
 import { dayTime, monogram, pillHtml } from '@/lib/ui/format';
+import { accentStyle, logoSrc, type Brand } from '@/lib/ui/brand';
 import { displayCents } from './money';
 import { ClientRefusal, type ClientMeta, type GoneReason, type LinkView, type RefusalCode } from './signing';
 
@@ -12,25 +13,29 @@ export const SIGN_HEADERS = { 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 /** Page chrome for the route-handler pages: the shared theme (src/lib/ui/theme.ts) and the client shell. */
-export function page(status: number, title: string, body: string, opts: { top?: string; wide?: boolean; bare?: boolean } = {}): Response {
+export function page(status: number, title: string, body: string, opts: { top?: string; wide?: boolean; bare?: boolean; brand?: Brand } = {}): Response {
   const main = opts.bare ? body : `<main class="cs-client__main${opts.wide ? '' : ' cs-client__main--narrow'}">${body}</main>`;
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>${esc(title)}</title><style>${THEME_CSS}</style></head><body><div class="cs-client">${opts.top ?? ''}${main}</div></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>${esc(title)}</title><style>${THEME_CSS}</style></head><body><div class="cs-client"${opts.brand?.accentHex ? ` style="${accentStyle(opts.brand.accentHex)}"` : ''}>${opts.top ?? ''}${main}</div></body></html>`;
   return new Response(html, { status, headers: { 'Content-Type': 'text/html; charset=utf-8', ...SIGN_HEADERS } });
 }
 
 const DEMO = '<p class="cs-small">Demo: not a legally vetted e-signature product.</p>';
 
-/** The sender's org on a client page: monogram + name (per-org branding by name, D-48). */
-const orgMark = (orgName: string) => `<div class="cs-orgmark"><span class="cs-mono" aria-hidden="true">${esc(monogram(orgName))}</span><span>${esc(orgName)}</span></div>`;
+/** The sender's org on a client page: its logo, or a monogram, then its name (D-48, D-66). */
+const orgMark = (orgName: string, brand?: Brand) => {
+  const src = brand ? logoSrc(brand) : null;
+  const mark = src ? `<img class="cs-logo" src="${src}" alt="">` : `<span class="cs-mono" aria-hidden="true">${esc(monogram(orgName))}</span>`;
+  return `<div class="cs-orgmark">${mark}<span>${esc(orgName)}</span></div>`;
+};
 
 /** The dark strip at the top of a client page (Main.dc.html): who sent it, and the demo disclaimer. */
 export const topNote = (inner: string) => `<header class="cs-topnote"><div><span>${inner}</span><span>Demo: not a legally vetted e-signature product</span></div></header>`;
 
 type Notice = { tone: 'bad' | 'warn' | 'grey'; glyph: string; word: string; heading: string; text: string; more?: string };
 
-function noticeHtml(n: Notice, orgName?: string): string {
+function noticeHtml(n: Notice, orgName?: string, brand?: Brand): string {
   const pill = n.tone === 'bad' ? 'cs-pill--bad' : n.tone === 'warn' ? 'cs-pill--warn' : '';
-  return `${orgName ? orgMark(orgName) : ''}<section class="cs-notice"><span class="cs-pill cs-pill--lg ${pill}" style="align-self:flex-start"><span aria-hidden="true">${n.glyph}</span>${esc(n.word)}</span><h1>${esc(n.heading)}</h1><p>${esc(n.text)}</p>${n.more ?? ''}</section>${DEMO}`;
+  return `${orgName ? orgMark(orgName, brand) : ''}<section class="cs-notice"><span class="cs-pill cs-pill--lg ${pill}" style="align-self:flex-start"><span aria-hidden="true">${n.glyph}</span>${esc(n.word)}</span><h1>${esc(n.heading)}</h1><p>${esc(n.text)}</p>${n.more ?? ''}</section>${DEMO}`;
 }
 
 // docs/design/Superseded.dc.html and LinkNotices.dc.html (D-13, D-36). The org and title are known on GET; a refused POST
@@ -61,8 +66,8 @@ export const notFoundPage = () =>
   page(404, 'Link not found', noticeHtml({ tone: 'grey', glyph: '?', word: 'Link not found', heading: 'We could not find this signing link.', text: 'Check that you copied the whole link from the message you were sent.' }));
 export const limitedPage = () =>
   page(429, 'Too many requests', noticeHtml({ tone: 'warn', glyph: '⏸', word: 'Too many requests', heading: 'Too many requests from your network.', text: 'Wait a few minutes, then reload this page.' }));
-export const gonePage = (reason: GoneReason, title?: string, orgName?: string) =>
-  page(410, 'Link no longer valid', noticeHtml(goneNotice(reason, title, orgName), orgName));
+export const gonePage = (reason: GoneReason, title?: string, orgName?: string, brand?: Brand) =>
+  page(410, 'Link no longer valid', noticeHtml(goneNotice(reason, title, orgName), orgName, brand), { brand });
 
 /** The 200 landing (D-30, D-33; docs/design/SignLanding.dc.html): who sent what, and the "Open proposal" POST that records the view. */
 export function landingPage(token: string, v: Extract<LinkView, { code: 200 }>): Response {
@@ -79,8 +84,8 @@ export function landingPage(token: string, v: Extract<LinkView, { code: 200 }>):
   return page(
     200,
     v.version.title,
-    `${orgMark(v.orgName)}<section class="cs-notice cs-landing" aria-labelledby="cs-t"><span class="cs-eyebrow">Proposal for ${esc(v.version.clientName)}</span><h1 id="cs-t">${esc(v.version.title)}</h1><dl>${facts}</dl>${open}<p class="cs-small">${done ? 'This proposal is signed. You can read it and download the PDF and the completion certificate.' : v.version.status === 'sent' ? 'Opening the proposal is recorded in its audit trail with the time, a hashed IP address and your browser.' : 'You opened this proposal before; it is waiting for your answer.'}</p></section>${DEMO}`,
-    { top },
+    `${orgMark(v.orgName, v.brand)}<section class="cs-notice cs-landing" aria-labelledby="cs-t"><span class="cs-eyebrow">Proposal for ${esc(v.version.clientName)}</span><h1 id="cs-t">${esc(v.version.title)}</h1><dl>${facts}</dl>${open}<p class="cs-small">${done ? 'This proposal is signed. You can read it and download the PDF and the completion certificate.' : v.version.status === 'sent' ? 'Opening the proposal is recorded in its audit trail with the time, a hashed IP address and your browser.' : 'You opened this proposal before; it is waiting for your answer.'}</p></section>${DEMO}`,
+    { top, brand: v.brand },
   );
 }
 
@@ -107,7 +112,9 @@ export async function handlePost(req: Request, token: string, run: (form: FormDa
   } catch (e) {
     if (!(e instanceof ClientRefusal)) throw e;
     if (e.status === 404) return notFoundPage();
-    if (e.status === 410) return gonePage(e.reason ?? 'closed');
+    // D-67: a POST from a page that went stale lands on GET /sign/<token>, which answers the branded 410 notice; reloading
+    // it no longer resubmits the form.
+    if (e.status === 410) return back('');
     if (e.status === 429) return limitedPage();
     return back(`review?error=${e.code satisfies RefusalCode}`);
   }

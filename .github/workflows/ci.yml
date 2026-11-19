@@ -55,7 +55,7 @@ jobs:
         run: |
           npx prisma migrate diff --from-config-datasource --to-schema prisma/schema --script > "$RUNNER_TEMP/schema-diff.sql"
           cat "$RUNNER_TEMP/schema-diff.sql"
-          if grep -nE '"(Template|TemplateSection|TemplateLine|Proposal|ProposalVersion|ProposalSection|ProposalLine|ProposalStatus|LineKind|SectionKind|DiscountType|ProposalDocument|SigningLink|ProposalSignature|DocumentKind|SignatureMethod)"' "$RUNNER_TEMP/schema-diff.sql"; then
+          if grep -nE '"(Template|TemplateSection|TemplateLine|Proposal|ProposalVersion|ProposalSection|ProposalLine|ProposalStatus|LineKind|SectionKind|DiscountType|ProposalDocument|SigningLink|ProposalSignature|DocumentKind|SignatureMethod|OrgBrand)"' "$RUNNER_TEMP/schema-diff.sql"; then
             echo "::error::Countersign migrations do not match prisma/schema (lines above)"; exit 1
           fi
       - name: RLS enforce leg — app role, system URL

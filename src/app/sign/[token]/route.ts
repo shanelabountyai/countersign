@@ -11,7 +11,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   try {
     const v = await openLink(token, metaOf(req));
     if (v.code === 404) return notFoundPage();
-    if (v.code === 410) return gonePage(v.reason, v.title, v.orgName);
+    if (v.code === 410) return gonePage(v.reason, v.title, v.orgName, v.brand);
     return landingPage(token, v);
   } catch (e) {
     if (e instanceof ClientRefusal && e.status === 429) return limitedPage();

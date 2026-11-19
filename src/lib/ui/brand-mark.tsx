@@ -12,11 +12,12 @@ export function BrandMark() {
   );
 }
 
-/** The sender's org on client pages: monogram + name (per-org branding by name, D-48). */
-export function OrgMark({ name, mono, large = false }: { name: string; mono: string; large?: boolean }) {
+/** The sender's org on client pages: its logo or a monogram, then its name (D-48, D-66). */
+export function OrgMark({ name, mono, logo, large = false }: { name: string; mono: string; logo?: string | null; large?: boolean }) {
   return (
     <span className="cs-orgmark">
-      <span className={large ? 'cs-mono cs-mono--lg' : 'cs-mono'} aria-hidden="true">{mono}</span>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a stored data: URL; the name beside it is the text */}
+      {logo ? <img className="cs-logo" src={logo} alt="" /> : <span className={large ? 'cs-mono cs-mono--lg' : 'cs-mono'} aria-hidden="true">{mono}</span>}
       <span>{name}</span>
     </span>
   );

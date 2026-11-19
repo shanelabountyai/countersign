@@ -11,6 +11,8 @@ import { hit, LIMITS } from '@/core/rate-limit';
 import { normalizeSha256, sha256Hex } from './hash';
 import { certificateModel, priceVersionSelection, trailOf } from './certificate';
 import type { TrailRow } from './pdf';
+import type { Brand } from '@/lib/ui/brand';
+import { brandIn } from './brand-store';
 import { renderCertificatePdf } from './pdf';
 import { PDF_RENDERER_VERSION } from './renderer';
 import { SelectionError } from './selection';
@@ -62,11 +64,13 @@ export function accessOf(l: Loaded, at: Date): { code: 200; state: 'active' | 'c
 
 export type LinkView =
   | { code: 404 }
-  | { code: 410; reason: GoneReason; title: string; orgName: string }
+  | { code: 410; reason: GoneReason; title: string; orgName: string; brand: Brand }
   | {
       code: 200;
       state: 'active' | 'completed';
       orgName: string;
+      /** The sending org's colour and logo for client pages (D-66). */
+      brand: Brand;
       expiresAt: Date;
       version: ReturnType<typeof presentVersion>;
       pdf: { sha256: string; byteLength: number };
@@ -94,7 +98,7 @@ async function view(token: string): Promise<LinkView> {
     if (!l) return { code: 404 } as const;
     const a = accessOf(l, now());
     if (a.code === 404) return a;
-    if (a.code === 410) return { ...a, title: l.version.title, orgName: l.orgName };
+    if (a.code === 410) return { ...a, title: l.version.title, orgName: l.orgName, brand: await brandIn(tx, link.orgId) };
     const [docs, sig] = await Promise.all([
       tx.proposalDocument.findMany({ where: { versionId: l.version.id, orgId: link.orgId }, select: { kind: true, sha256: true, byteLength: true, rendererVersion: true, orgName: true } }),
       tx.proposalSignature.findUnique({ where: { versionId: l.version.id }, select: { signerName: true, method: true, signedAt: true, totalCents: true, selectedLineIds: true } }),
@@ -110,6 +114,7 @@ async function view(token: string): Promise<LinkView> {
       code: 200,
       state: a.state,
       orgName: l.orgName,
+      brand: await brandIn(tx, link.orgId),
       expiresAt: link.expiresAt,
       version: presentVersion(l.version),
       pdf: { sha256: pdf.sha256, byteLength: pdf.byteLength },
