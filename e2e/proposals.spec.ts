@@ -26,7 +26,7 @@ test('template → proposal → draft save → supersede after send', async ({ p
   await page.getByLabel('Line 1 description').fill('Design');
   await page.getByLabel('Line 1 unit price').fill('2,500');
   await page.getByLabel('Line 1 tax rate').fill('8.25');
-  await page.getByRole('button', { name: 'Save template' }).click();
+  await page.getByRole('button', { name: 'Save template' }).last().click();
   await expect(page.getByRole('status')).toHaveText('Template saved.');
 
   await page.getByRole('navigation').getByRole('link', { name: 'Proposals' }).click();

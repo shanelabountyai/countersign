@@ -47,3 +47,8 @@ built UI (findings DES-*, UX-*, A11Y-* in the design-pass PR). Each is checked b
 - **DUX-09** A refused client sign moves focus to its message; an empty drawn signature is caught before submit so nothing on the page is lost (UX-4, A11Y-5). Not automated.
 - **DUX-10** A change to the total from an add-on is announced politely (A11Y-4). Not automated.
 - **DUX-11** No mockup sample data ships: no artboard names, numbers or `[PLACEHOLDERS]` in `src/` (DES review).
+- **DUX-12** An org can set an accent colour and a PNG/JPEG logo for its client pages (D-66). A colour under 4.5:1 against white or the page background is refused with its ratio; any other file type or a file over 100 KB is refused. PDFs and `/verify` are unaffected.
+- **DUX-13** A sign or decline submitted from a stale page lands on the branded link notice (D-67).
+- **DUX-14** The sender sees a decline and the client's reason on the proposal page (D-69).
+- **DUX-15** Send warns about merge fields the text uses but that are empty (D-70).
+- **DUX-16** Sender pages work at 390 px: the settings links scroll in one row, the proposals list stacks (D-68). Not automated beyond the 320 px editor check.

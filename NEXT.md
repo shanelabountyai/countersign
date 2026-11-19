@@ -1,5 +1,14 @@
 # NEXT
 
+## ▶ 2026-11-19: design follow-ups PR open (branch `design/followups`), Shane's picks after the design pass merged (#10)
+Owner rulings recorded (D-66): D-54 kept as built; D-48 → real logo + colour. Built: `OrgBrand` table + Settings → Brand
+(accent checked for contrast, PNG/JPEG logo ≤ 100 KB) on every client page (D-66); stale sign/decline POST → 303 to the
+branded notice (D-67); sender header scrolls in one row and the list stacks on a phone (D-68); decline reason on the
+proposal page (D-69); empty merge-field warning at Send (D-70); polish (D-71). PRD DUX-12 to DUX-16. Local gate: lint,
+typecheck, vitest 812 passed / 31 skipped, e2e 23 passed (axe 0 violations, incl. branded pages), check-modules OK.
+New migration (hand-written, D-27 diff in CI covers `OrgBrand`). **Shane:** set Lab Intelligence's logo and colour in its
+org under Settings → Brand once deployed; review; merge or not.
+
 ## ▶ 2026-11-18: design pass PR open (branch `design/impl`): Claude Design artboards built, 7 gap screens, design/UX/a11y review fixed
 Built every artboard in `docs/design/` (5 original + 7 gap designs added this run) into the real pages on the existing
 stack: one shared stylesheet (`src/lib/ui/theme.ts`), no UI library, no web font, light only. No business logic,
