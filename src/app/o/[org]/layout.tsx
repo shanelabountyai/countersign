@@ -6,7 +6,9 @@ import { BrandMark } from '@/lib/ui/brand-mark';
 import { NavLink } from './nav-link';
 
 // Navigation only. Layouts do not re-run on every navigation, so each page calls requireOrg itself.
-// The header is Editor.dc.html's: Proposals, Templates and Verify first; the foundation's pages stay one click away.
+// The header is Editor.dc.html's: Proposals, Templates and Verify first; the foundation's pages stay one click away, in
+// one row that scrolls sideways on a phone instead of wrapping (D-68). Projects (a foundation demo page) is left out of the
+// nav; its route still works.
 export default async function OrgLayout({ children, params }: { children: React.ReactNode; params: Promise<{ org: string }> }) {
   const ctx = await requireOrg((await params).org);
   const org = await db.org.findUniqueOrThrow({ where: { id: ctx.orgId }, select: { name: true } });
@@ -22,10 +24,10 @@ export default async function OrgLayout({ children, params }: { children: React.
             <NavLink href={`${base}/templates`}>Templates</NavLink>
             <a href="/verify" className="cs-nav__link">Verify a PDF</a>
           </div>
-          <div className="cs-nav__more">
+          <div className="cs-nav__more" role="group" aria-label="Settings and account">
             <Link href={base}>Home</Link>
-            <Link href={`${base}/projects`}>Projects</Link>
             <Link href={`${base}/settings/members`}>Members</Link>
+            {can(ctx.role, 'org.update') && <Link href={`${base}/settings/brand`}>Brand</Link>}
             {can(ctx.role, 'audit.read') && <><Link href={`${base}/settings/audit`}>Audit log</Link><Link href={`${base}/settings/security`}>Security</Link></>}
             {ctx.role === 'owner' && <Link href={`${base}/settings/sso`}>SSO</Link>} {/* sso */}
             {can(ctx.role, 'apikeys.manage') && <Link href={`${base}/settings/apikeys`}>API keys</Link>} {/* apikeys */}

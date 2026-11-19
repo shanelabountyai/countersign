@@ -16,14 +16,14 @@ export default async function TemplateEditor({ params }: { params: Promise<{ org
   return (
     <main className="cs-app cs-app--stack">
       <Link href={`/o/${ctx.slug}/templates`} className="cs-back">← Templates</Link>
-      <div className="cs-pagehead"><h1>{t.name}</h1></div>
+      <div className="cs-pagehead"><h1>{t.name}</h1>{editable && <button type="submit" form="cs-template-form" className="cs-btn cs-btn--primary">Save template</button>}</div>
       {editable ? (
         <>
           <div role="note" className="cs-banner cs-banner--info">
             <span className="cs-banner__glyph" aria-hidden="true">i</span>
             <p>Saving changes this template only. Proposals already made from it keep their own copy.</p>
           </div>
-          <EditorForm action={saveTemplate.bind(null, ctx.slug)} footer={<button type="submit" className="cs-btn cs-btn--primary">Save template</button>}>
+          <EditorForm id="cs-template-form" action={saveTemplate.bind(null, ctx.slug)} footer={<button type="submit" className="cs-btn cs-btn--primary">Save template</button>}>
               <input type="hidden" name="id" value={t.id} />
               <section aria-labelledby="cs-details" className="cs-card">
                 <h2 id="cs-details">Details</h2>

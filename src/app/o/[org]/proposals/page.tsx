@@ -17,7 +17,7 @@ export default async function Proposals({ params }: { params: Promise<{ org: str
   return (
     <main className="cs-app">
       <div className="cs-col">
-        <div className="cs-pagehead"><h1>Proposals</h1></div>
+        <div className="cs-pagehead"><h1>Proposals</h1>{editor && <a href="#cs-new" className="cs-btn cs-btn--primary cs-onlynarrow">New proposal</a>}</div>
         <section aria-label="All proposals" className="cs-card cs-card--flush">
           {proposals.length === 0 ? (
             <div className="cs-empty">
@@ -26,17 +26,17 @@ export default async function Proposals({ params }: { params: Promise<{ org: str
             </div>
           ) : (
             <div className="cs-scroll">
-              <table className="cs-table" style={{ minWidth: 680 }}>
+              <table className="cs-table cs-stack" style={{ minWidth: 680 }}>
                 <thead><tr><th scope="col">Proposal</th><th scope="col">Client</th><th scope="col">Version</th><th scope="col">Status</th><th scope="col">Updated</th><th scope="col" className="cs-num">Total</th></tr></thead>
                 <tbody>
                   {proposals.map((p) => (
                     <tr key={p.id}>
                       <td><Link href={`/o/${ctx.slug}/proposals/${p.id}`} style={{ fontWeight: 600 }}>{p.title}</Link></td>
-                      <td>{p.clientName}</td>
-                      <td>v{p.number}</td>
-                      <td><StatusPill status={p.status} /></td>
-                      <td>{day(p.updatedAt)}</td>
-                      <td className="cs-num">{displayCents(p.totalCents)}</td>
+                      <td data-label="Client">{p.clientName}</td>
+                      <td data-label="Version">v{p.number}</td>
+                      <td data-label="Status"><StatusPill status={p.status} /></td>
+                      <td data-label="Updated">{day(p.updatedAt)}</td>
+                      <td className="cs-num" data-label="Total">{displayCents(p.totalCents)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -48,7 +48,7 @@ export default async function Proposals({ params }: { params: Promise<{ org: str
       {editor && (
         <aside aria-label="New proposal" className="cs-side">
           <div className="cs-card">
-            <h2>New proposal</h2>
+            <h2 id="cs-new" tabIndex={-1}>New proposal</h2>
             <ActionForm action={addProposal.bind(null, ctx.slug)}>
               <div className="cs-rows">
                 <label className="cs-label">

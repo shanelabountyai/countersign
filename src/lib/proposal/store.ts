@@ -611,3 +611,12 @@ export async function getDocument(ctx: OrgCtx, proposalId: string, versionNumber
   if (!d) notFound();
   return d;
 }
+
+/** The client's decline of a version, from its audit row (D-69): when, and the optional reason they gave. Read-only. */
+export async function declineOf(ctx: OrgCtx, versionId: string): Promise<{ at: Date; reason: string } | null> {
+  const e = await withOrg(ctx, (tx) =>
+    tx.auditEvent.findFirst({ where: { orgId: ctx.orgId, targetType: 'proposalVersion', targetId: versionId, action: 'proposal.version.declined' }, orderBy: { id: 'desc' }, select: { at: true, data: true } }), { atomic: false });
+  if (!e) return null;
+  const reason = (e.data as Record<string, unknown> | null)?.reason;
+  return { at: e.at, reason: typeof reason === 'string' ? reason : '' };
+}

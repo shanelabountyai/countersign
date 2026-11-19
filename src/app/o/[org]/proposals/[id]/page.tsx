@@ -3,7 +3,8 @@ import { can } from '@/core/authz/permissions';
 import { requireOrg } from '@/core/authz/guards';
 import { ActionForm } from '@/core/ui/action-form';
 import { displayCents, formatMoney, formatPercent, formatQuantity } from '@/lib/proposal/money';
-import { getProposal, LINK_DAYS, signingRecord } from '@/lib/proposal/store';
+import { usedFields } from '@/lib/proposal/merge';
+import { declineOf, getProposal, LINK_DAYS, mergeValues, signingRecord } from '@/lib/proposal/store';
 import { day, dayTime } from '@/lib/ui/format';
 import { StatusPill } from '@/lib/ui/status-pill';
 import { newLinkAction, removeProposal, saveProposal, sendProposalAction } from '../actions';
@@ -51,6 +52,10 @@ export default async function ProposalEditor({ params, searchParams }: { params:
     { word: 'Viewed', when: v.status === 'viewed' ? day(v.statusAt) : '' },
     { word: ending, when: step === 3 ? day(v.statusAt) : 'Waiting' },
   ];
+  const declined = v.status === 'declined' ? await declineOf(ctx, v.id) : null;
+  // D-70: merge fields the text uses but that are empty would reach the client as blanks ("Scope: ."). A warning, not a block.
+  const values = mergeValues(v);
+  const emptyUsed = [...new Set(v.sections.flatMap((s) => usedFields(`${s.title}\n${s.body}`)))].filter((f) => values[f].trim() === '');
   const sections = v.sections.filter((s) => s.kind !== 'terms');
   const terms = v.sections.filter((s) => s.kind === 'terms');
 
@@ -78,7 +83,7 @@ export default async function ProposalEditor({ params, searchParams }: { params:
         {superseded && <p role="status" className="cs-banner cs-banner--ok"><span className="cs-banner__glyph" aria-hidden="true">✓</span>Saved as version {superseded}. The earlier version is kept unchanged and its signing link no longer works.</p>}
         {v.status !== 'draft' && v.status !== 'signed' && (
           <div role="note" className="cs-banner">
-            <span className="cs-banner__glyph" aria-hidden="true">◐</span>
+            <span className="cs-banner__glyph cs-half" aria-hidden="true" />
             <p>
               <strong>Version {v.number} {STATUS_NOTE[v.status]} and is frozen. Saving creates version {v.number + 1} as a new draft.</strong>{' '}
               {v.status === 'sent' || v.status === 'viewed'
@@ -103,6 +108,12 @@ export default async function ProposalEditor({ params, searchParams }: { params:
                 ? <>Sending renders this draft as a PDF, records its SHA-256 and freezes version {v.number}. You get a signing link to give the client; no email is sent.</>
                 : <>{liveLink ? <>The client&apos;s link is valid until {dayTime(liveLink.expiresAt)}.</> : <>No live link.</>} {v.status === 'viewed' ? 'The client has opened the proposal.' : 'The client has not opened it yet.'}</>}
             </p>
+            {v.status === 'draft' && emptyUsed.length > 0 && (
+              <div className="cs-banner" data-testid="empty-merge-warning">
+                <span className="cs-banner__glyph" aria-hidden="true">!</span>
+                <p>The text uses {emptyUsed.map((f) => `{{${f}}}`).join(', ')} but {emptyUsed.length === 1 ? 'that field is' : 'those fields are'} empty, so the client would see a blank there. Fill {emptyUsed.length === 1 ? 'it' : 'them'} in under Edit, or send as is.</p>
+              </div>
+            )}
             {editable && (v.status === 'draft' ? (
               <LinkActionForm key="link" action={sendProposalAction.bind(null, ctx.slug)} button={`Send version ${v.number}`}>
                 <input type="hidden" name="id" value={id} />
@@ -116,6 +127,13 @@ export default async function ProposalEditor({ params, searchParams }: { params:
                 {daysField}
               </LinkActionForm>
             ))}
+          </section>
+        )}
+        {declined && (
+          <section aria-labelledby="cs-declined" className="cs-card">
+            <h2 id="cs-declined">Declined by the client</h2>
+            <p style={{ margin: 0 }}>On {dayTime(declined.at)}. {declined.reason ? 'Their reason:' : 'They gave no reason.'}</p>
+            {declined.reason && <blockquote style={{ margin: 0, padding: '8px 12px', borderLeft: '3px solid var(--cs-line)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{declined.reason}</blockquote>}
           </section>
         )}
         {cur?.signature && (

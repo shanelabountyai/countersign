@@ -66,7 +66,7 @@ ${rec.certificateSha256 ? row('Certificate SHA-256', `<span class="cs-hash">${re
     // D-45: every stored hash, the trail and the price agree; only re-rendering failed, and the documents were rendered by
     // another version of the PDF renderer than the one installed now. Not evidence of tampering, and not a full check.
     const was = [...new Set([r.renderer.proposal, r.renderer.certificate].filter((x): x is string => !!x))];
-    return card('warn', 'renderer_changed', '◐', 'Hashes match; the PDF renderer has changed since signing', `<p>Your file is the stored ${r.kind === 'certificate' ? 'completion certificate' : 'proposal'} of a signed version, and every stored fingerprint, the audit trail and
+    return card('warn', 'renderer_changed', '<span class=\"cs-half\" aria-hidden=\"true\"></span>', 'Hashes match; the PDF renderer has changed since signing', `<p>Your file is the stored ${r.kind === 'certificate' ? 'completion certificate' : 'proposal'} of a signed version, and every stored fingerprint, the audit trail and
 the agreed price still agree. The documents were rendered by <code>${was.map(esc).join('</code>, <code>')}</code>; this server now runs
 <code>${esc(r.renderer.current)}</code>, which no longer produces the identical bytes, so the re-render checks below could not be
 repeated. That is a software change on our side, not a change to the document. Ask the sender to confirm with the original renderer
