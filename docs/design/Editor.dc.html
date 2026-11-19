@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proposal editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F7F7F4}
+a{color:#0F5E63}a:hover{color:#0A4347}
+</style>
+</helmet>
+<div style="min-height: 100%; background: #F7F7F4; color: #16181D; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.5;">
+<header style="background: #FFFFFF; border-bottom: 1px solid #D9D9D2;">
+<div style="max-width: 1360px; margin: 0 auto; padding: 12px 24px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+<nav aria-label="Main" style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px;">
+<span style="display: flex; align-items: center; gap: 8px;"><svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="7" fill="#16181D"/><path d="M9 7v11a3 3 0 0 0 3 3h7" stroke="#7FD1CF" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="19" cy="9" r="2.4" fill="#7FD1CF"/></svg><span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700;">Countersign</span></span>
+<a href="#" style="font-weight: 600; text-decoration: none; color: #16181D; border-bottom: 2px solid #0F5E63; padding: 10px 0;">Proposals</a>
+<a href="#" style="text-decoration: none; color: #3E434D; padding: 10px 0;">Templates</a>
+<a href="#" style="text-decoration: none; color: #3E434D; padding: 10px 0;">Verify a PDF</a>
+</nav>
+<span style="font-size: 14px; color: #565B66;">Lab Intelligence · Shane (owner)</span>
+</div>
+</header>
+<main style="max-width: 1360px; margin: 0 auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+
+<div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 18px;">
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+<div style="display: flex; flex-direction: column; gap: 4px;">
+<span style="font-size: 13px; color: #565B66;">LI-2026-014 · Northwind Outfitters (sample) · from template "Discovery engagement"</span>
+<h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700;">AI Use-Case Discovery and Evaluation</h1>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap;">
+<button type="button" style="min-height: 44px; padding: 0 16px; border-radius: 10px; border: 1px solid #8A8F99; background: #FFFFFF; font: inherit; font-weight: 600;">Preview as client</button>
+<button type="button" style="min-height: 44px; padding: 0 16px; border-radius: 10px; border: none; background: #0F5E63; color: #FFFFFF; font: inherit; font-weight: 600;">Send version 3</button>
+</div>
+</div>
+<div role="status" style="display: flex; gap: 10px; align-items: flex-start; background: #FBF0DA; color: #5C3800; border-radius: 10px; padding: 12px 14px;">
+<span aria-hidden="true" style="font-weight: 700;">◐</span>
+<span><strong>Editing creates version 3.</strong> Version 2 is out with the client. Sending version 3 voids the version 2 link; the client will see a "newer version" page.</span>
+</div>
+
+<section aria-labelledby="li" style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 14px; overflow: hidden;">
+<div style="padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #E4E4DE;">
+<h2 id="li" style="margin: 0; font-size: 17px; font-weight: 600;">Line items</h2>
+<button type="button" style="min-height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid #8A8F99; background: #FFFFFF; font: inherit; font-weight: 600;">+ Add item</button>
+</div>
+<div style="overflow-x: auto;">
+<table style="width: 100%; min-width: 760px; border-collapse: collapse;">
+<thead><tr style="background: #F0F0EB; text-align: left; font-size: 13px; color: #3E434D;">
+<th scope="col" style="padding: 10px 16px; font-weight: 600;">Item</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Pricing</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600; text-align: right;">Qty</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600; text-align: right;">Rate</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Tax</th>
+<th scope="col" style="padding: 10px 16px; font-weight: 600; text-align: right;">Amount</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="4">
+<tr style="border-top: 1px solid #E4E4DE;">
+<td style="padding: 12px 16px;"><div style="display: flex; flex-direction: column;"><span style="font-weight: 500;">{{l.name}}</span><sc-if value="{{l.opt}}" hint-placeholder-val="{{false}}"><span style="align-self: flex-start; font-size: 12px; font-weight: 600; color: #0F5E63; border: 1px solid #0F5E63; border-radius: 6px; padding: 0 6px; margin-top: 2px;">Optional add-on</span></sc-if></div></td>
+<td style="padding: 12px 8px; color: #3E434D;">{{l.kind}}</td>
+<td style="padding: 12px 8px; text-align: right;">{{l.qty}}</td>
+<td style="padding: 12px 8px; text-align: right;">{{l.rate}}</td>
+<td style="padding: 12px 8px; color: #3E434D;">{{l.tax}}</td>
+<td style="padding: 12px 16px; text-align: right; font-weight: 500;">{{l.amt}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+<div style="padding: 16px; display: flex; justify-content: flex-end; border-top: 1px solid #E4E4DE;">
+<dl style="margin: 0; width: 380px; max-width: 100%; display: flex; flex-direction: column; gap: 6px;">
+<div style="display: flex; justify-content: space-between;"><dt>Subtotal, required items</dt><dd style="margin: 0;">$10,740.00</dd></div>
+<div style="display: flex; justify-content: space-between; color: #3E434D;"><dt>Optional add-ons (if accepted)</dt><dd style="margin: 0;">+$1,200.00</dd></div>
+<div style="display: flex; justify-content: space-between; color: #3E434D;"><dt>Sales tax 8.5% on $540.00 (rounded once)</dt><dd style="margin: 0;">$45.90</dd></div>
+<div style="display: flex; justify-content: space-between; border-top: 2px solid #16181D; padding-top: 8px; font-weight: 600; font-size: 17px;"><dt>Total</dt><dd style="margin: 0;">$10,785.90 – $11,985.90</dd></div>
+<span style="font-size: 12px; color: #565B66;">Stored in whole cents. Reordering lines never changes a total.</span>
+</dl>
+</div>
+</section>
+
+<section aria-labelledby="mf" style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+<h2 id="mf" style="margin: 0; font-size: 17px; font-weight: 600;">Merge fields</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">{client.name}<input type="text" value="Northwind Outfitters" style="min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 400;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">{signer.name}<input type="text" value="Jordan Avery" style="min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 400;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">{proposal.expires}<input type="text" value="Dec 1, 2026" style="min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 400;"></label>
+</div>
+</section>
+</div>
+
+<aside aria-label="State and history" style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+<section style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600;">State</h2>
+<ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px;">
+<sc-for list="{{states}}" as="s" hint-placeholder-count="5">
+<li style="display: flex; align-items: center; gap: 10px; color: {{s.ink}}; font-weight: {{s.wt}};"><span aria-hidden="true" style="width: 18px; text-align: center;">{{s.g}}</span>{{s.w}}<span style="margin-left: auto; font-size: 13px; font-weight: 400; color: #565B66;">{{s.when}}</span></li>
+</sc-for>
+</ol>
+</section>
+<section style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600;">Versions</h2>
+<sc-for list="{{versions}}" as="v" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-top: 1px solid #E4E4DE;">
+<div style="display: flex; justify-content: space-between; gap: 8px;"><span style="font-weight: 600;">{{v.n}}</span><span style="display: inline-flex; gap: 4px; background: {{v.bg}}; color: {{v.fg}}; border-radius: 999px; padding: 0 9px; font-size: 13px; font-weight: 600;"><span aria-hidden="true">{{v.g}}</span>{{v.w}}</span></div>
+<span style="font-size: 13px; color: #565B66;">{{v.note}}</span>
+</div>
+</sc-for>
+<a href="#" style="font-size: 14px; font-weight: 600;">Open audit trail</a>
+</section>
+</aside>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const lines = [
+      { name: 'Discovery workshop', kind: 'Fixed fee', qty: '1', rate: '$4,800.00', tax: 'None', amt: '$4,800.00', opt: false },
+      { name: 'Use-case evaluation', kind: 'Hourly', qty: '24 h', rate: '$225.00', tax: 'None', amt: '$5,400.00', opt: false },
+      { name: 'Workshop materials kit', kind: 'Per unit', qty: '12', rate: '$45.00', tax: 'Sales 8.5%', amt: '$540.00', opt: false },
+      { name: 'Executive readout deck', kind: 'Fixed fee', qty: '1', rate: '$1,200.00', tax: 'None', amt: '$1,200.00', opt: true }
+    ];
+    const done = '#16181D';
+    const states = [
+      { w: 'Draft', g: '✓', when: 'Nov 14', ink: done, wt: '400' },
+      { w: 'Sent (v2)', g: '✓', when: 'Nov 17, 10:12', ink: done, wt: '400' },
+      { w: 'Viewed', g: '●', when: 'Nov 17, 10:40', ink: '#0F5E63', wt: '600' },
+      { w: 'Signed or declined', g: '○', when: 'Waiting', ink: '#565B66', wt: '400' },
+      { w: 'Expires', g: '○', when: 'Dec 1', ink: '#565B66', wt: '400' }
+    ];
+    const versions = [
+      { n: 'Version 3', w: 'Draft', g: '✎', bg: '#EEEEEA', fg: '#3E434D', note: 'Unsaved edits; sending voids v2' },
+      { n: 'Version 2', w: 'Viewed', g: '●', bg: '#E6EEF9', fg: '#1D4F91', note: 'Sent Nov 17 · add-on made optional' },
+      { n: 'Version 1', w: 'Superseded', g: '↻', bg: '#FBF0DA', fg: '#6B4100', note: 'Link now shows the newer-version page' }
+    ];
+    return { lines, states, versions };
+  }
+}
+</script>
+</body>
+</html>

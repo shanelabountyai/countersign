@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proposals list</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F7F7F4}
+a{color:#0F5E63}a:hover{color:#0A4347}
+</style>
+</helmet>
+<!-- Gap design (2026-11-18): /o/<org>/proposals. Header as Editor.dc.html. Status pills: word + glyph + colour, the
+     same set as the editor's Versions panel. "New proposal" form is hidden for a scorekeeper (D-24). Rows are the latest
+     version of each proposal (listProposals). Empty state shown when there are none. -->
+<div style="min-height: 100%; background: #F7F7F4; color: #16181D; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.5;">
+<header style="background: #FFFFFF; border-bottom: 1px solid #D9D9D2;">
+<div style="max-width: 1360px; margin: 0 auto; padding: 12px 24px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+<nav aria-label="Main" style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px;">
+<span style="display: flex; align-items: center; gap: 8px;"><svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="7" fill="#16181D"/><path d="M9 7v11a3 3 0 0 0 3 3h7" stroke="#7FD1CF" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="19" cy="9" r="2.4" fill="#7FD1CF"/></svg><span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700;">Countersign</span></span>
+<a href="#" aria-current="page" style="font-weight: 600; text-decoration: none; color: #16181D; border-bottom: 2px solid #0F5E63; padding: 10px 0;">Proposals</a>
+<a href="#" style="text-decoration: none; color: #3E434D; padding: 10px 0;">Templates</a>
+<a href="#" style="text-decoration: none; color: #3E434D; padding: 10px 0;">Verify a PDF</a>
+<a href="#" style="text-decoration: none; color: #3E434D; padding: 10px 0;">Settings</a>
+</nav>
+<span style="font-size: 14px; color: #565B66;">[ORG NAME] · [YOUR NAME] ([ROLE])</span>
+</div>
+</header>
+<main style="max-width: 1360px; margin: 0 auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+<div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 16px;">
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+<h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700;">Proposals</h1>
+<button type="button" onClick="{{toggleEmpty}}" style="min-height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid #8A8F99; background: #FFFFFF; font: inherit; font-size: 14px;">Preview: {{emptyLabel}}</button>
+</div>
+<section aria-label="All proposals" style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 14px; overflow: hidden;">
+<sc-if value="{{empty}}" hint-placeholder-val="{{false}}">
+<div style="padding: 40px 24px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600;">No proposals yet</h2>
+<p style="margin: 0; color: #3E434D;">Start from a template or a blank page with the form on the right. Nothing is sent until you press Send.</p>
+</div>
+</sc-if>
+<sc-if value="{{full}}" hint-placeholder-val="{{true}}">
+<div style="overflow-x: auto;">
+<table style="width: 100%; min-width: 680px; border-collapse: collapse;">
+<thead><tr style="background: #F0F0EB; text-align: left; font-size: 13px; color: #3E434D;">
+<th scope="col" style="padding: 10px 16px; font-weight: 600;">Proposal</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Client</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Version</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Status</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Updated</th>
+<th scope="col" style="padding: 10px 16px; font-weight: 600; text-align: right;">Total</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="5">
+<tr style="border-top: 1px solid #E4E4DE;">
+<td style="padding: 12px 16px;"><a href="#" style="font-weight: 600; display: inline-flex; min-height: 44px; align-items: center;">{{r.title}}</a></td>
+<td style="padding: 12px 8px;">{{r.client}}</td>
+<td style="padding: 12px 8px;">v{{r.n}}</td>
+<td style="padding: 12px 8px;"><span style="display: inline-flex; gap: 4px; background: {{r.bg}}; color: {{r.fg}}; border-radius: 999px; padding: 0 9px; font-size: 13px; font-weight: 600;"><span aria-hidden="true">{{r.g}}</span>{{r.w}}</span></td>
+<td style="padding: 12px 8px; color: #3E434D;">{{r.when}}</td>
+<td style="padding: 12px 16px; text-align: right; font-variant-numeric: tabular-nums;">{{r.total}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</sc-if>
+</section>
+</div>
+<aside aria-label="New proposal" style="flex: 1 1 320px; min-width: 0;">
+<form style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+<h2 style="margin: 0; font-size: 17px; font-weight: 600;">New proposal</h2>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600;">Template<select style="min-height: 44px; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 400; background: #FFFFFF;"><option>Blank</option><option>[TEMPLATE NAME]</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600;">Title<input type="text" style="min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 400;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600;">Client<input type="text" style="min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 400;"></label>
+<button type="button" style="min-height: 44px; padding: 0 16px; border-radius: 10px; border: none; background: #0F5E63; color: #FFFFFF; font: inherit; font-weight: 600;">Create proposal</button>
+<span style="font-size: 13px; color: #565B66;">Creates version 1 as a draft. The template is copied; later template edits never change it.</span>
+</form>
+</aside>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":820}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { empty: false }; }
+  renderVals() {
+    const S = {
+      draft: { w: 'Draft', g: '✎', bg: '#EEEEEA', fg: '#3E434D' },
+      sent: { w: 'Sent', g: '↗', bg: '#E3F1F1', fg: '#0F5E63' },
+      viewed: { w: 'Viewed', g: '●', bg: '#E6EEF9', fg: '#1D4F91' },
+      signed: { w: 'Signed', g: '✓', bg: '#1D4F91', fg: '#FFFFFF' },
+      declined: { w: 'Declined', g: '✗', bg: '#FBE9E7', fg: '#8A1F11' },
+      expired: { w: 'Expired', g: '⌛', bg: '#FBF0DA', fg: '#6B4100' }
+    };
+    const rows = ['draft', 'sent', 'viewed', 'signed', 'declined', 'expired'].map((s) => ({ title: '[PROPOSAL TITLE]', client: '[CLIENT]', n: '[N]', when: '[UPDATED, UTC]', total: '[TOTAL]', ...S[s] }));
+    return { rows, empty: this.state.empty, full: !this.state.empty, emptyLabel: this.state.empty ? 'empty' : 'with proposals', toggleEmpty: () => this.setState({ empty: !this.state.empty }) };
+  }
+}
+</script>
+</body>
+</html>

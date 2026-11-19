@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Template editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F7F7F4}
+a{color:#0F5E63}a:hover{color:#0A4347}
+</style>
+</helmet>
+<!-- Gap design (2026-11-18): /o/<org>/templates/<id>. Same panels as Editor.dc.html. The section and line rows here are
+     also the editable rows of the proposal editor's "Edit" panel (one component, editor-fields.tsx). Fields are the real
+     ones (D-08, D-23, D-25): merge fields {{mfClient}} {{mfScope}} {{mfTimeline}}; amounts in dollars, quantities to 3 places,
+     rates in percent. Blank rows add; "Remove" in Kind drops a row. Scorekeepers see a read-only note instead (D-24). -->
+<div style="min-height: 100%; background: #F7F7F4; color: #16181D; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.5;">
+<header style="background: #FFFFFF; border-bottom: 1px solid #D9D9D2;">
+<div style="max-width: 1360px; margin: 0 auto; padding: 12px 24px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+<nav aria-label="Main" style="display: flex; flex-wrap: wrap; align-items: center; gap: 18px;">
+<span style="display: flex; align-items: center; gap: 8px;"><svg width="24" height="24" viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="7" fill="#16181D"/><path d="M9 7v11a3 3 0 0 0 3 3h7" stroke="#7FD1CF" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="19" cy="9" r="2.4" fill="#7FD1CF"/></svg><span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700;">Countersign</span></span>
+<a href="#" style="text-decoration: none; color: #3E434D; padding: 10px 0;">Proposals</a>
+<a href="#" aria-current="page" style="font-weight: 600; text-decoration: none; color: #16181D; border-bottom: 2px solid #0F5E63; padding: 10px 0;">Templates</a>
+<a href="#" style="text-decoration: none; color: #3E434D; padding: 10px 0;">Verify a PDF</a>
+<a href="#" style="text-decoration: none; color: #3E434D; padding: 10px 0;">Settings</a>
+</nav>
+<span style="font-size: 14px; color: #565B66;">[ORG NAME] · [YOUR NAME] ([ROLE])</span>
+</div>
+</header>
+<main style="max-width: 1360px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 18px;">
+<a href="#" style="font-size: 14px; font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; align-self: flex-start;">← Templates</a>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;">
+<h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700;">[TEMPLATE NAME]</h1>
+<button type="button" style="min-height: 44px; padding: 0 16px; border-radius: 10px; border: none; background: #0F5E63; color: #FFFFFF; font: inherit; font-weight: 600;">Save template</button>
+</div>
+<div role="note" style="display: flex; gap: 10px; align-items: flex-start; background: #E6EEF9; color: #163F75; border-radius: 10px; padding: 12px 14px;"><span aria-hidden="true" style="font-weight: 700;">i</span><span>Saving changes this template only. Proposals already made from it keep their own copy.</span></div>
+
+<section aria-labelledby="nm" style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+<h2 id="nm" style="margin: 0; font-size: 17px; font-weight: 600;">Details</h2>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600; max-width: 480px;">Name<input type="text" value="[TEMPLATE NAME]" style="min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 400;"></label>
+</section>
+
+<section aria-labelledby="sc" style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+<h2 id="sc" style="margin: 0; font-size: 17px; font-weight: 600;">Sections and terms</h2>
+<p style="margin: 0; font-size: 14px; color: #3E434D;">Merge fields: <code style="background: #F0F0EB; border-radius: 4px; padding: 1px 5px;">{{mfClient}}</code> <code style="background: #F0F0EB; border-radius: 4px; padding: 1px 5px;">{{mfScope}}</code> <code style="background: #F0F0EB; border-radius: 4px; padding: 1px 5px;">{{mfTimeline}}</code>. Any other <code style="background: #F0F0EB; border-radius: 4px; padding: 1px 5px;">{{mfAny}}</code> is refused on save. Leave a row blank to skip it.</p>
+<sc-for list="{{sections}}" as="s" hint-placeholder-count="3">
+<fieldset style="margin: 0; border: 1px solid #E4E4DE; border-radius: 10px; padding: 12px; display: grid; grid-template-columns: 90px 160px minmax(0, 1fr); gap: 10px;">
+<legend style="font-size: 13px; font-weight: 600; color: #3E434D; padding: 0 4px;">{{s.legend}}</legend>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">Order<input type="text" value="{{s.order}}" style="min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 400;"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">Kind<select style="min-height: 44px; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 400; background: #FFFFFF;"><option>Section</option><option>Terms</option><option>Remove</option></select></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">Title<input type="text" value="{{s.title}}" style="min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 10px; font: inherit; font-weight: 400;"></label>
+<label style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600;">Text<textarea rows="4" style="box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 400;">{{s.body}}</textarea></label>
+</fieldset>
+</sc-for>
+</section>
+
+<section aria-labelledby="li" style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 14px; overflow: hidden;">
+<div style="padding: 14px 16px; border-bottom: 1px solid #E4E4DE; display: flex; flex-direction: column; gap: 4px;">
+<h2 id="li" style="margin: 0; font-size: 17px; font-weight: 600;">Line items</h2>
+<span style="font-size: 14px; color: #3E434D;">Amounts in dollars (12.50), quantities in units or hours (1.5), rates in percent (8.25). Optional items are add-ons the client can switch on.</span>
+</div>
+<div style="overflow-x: auto;">
+<table style="width: 100%; min-width: 980px; border-collapse: collapse;">
+<thead><tr style="background: #F0F0EB; text-align: left; font-size: 13px; color: #3E434D;">
+<th scope="col" style="padding: 10px 8px 10px 16px; font-weight: 600;">Order</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Pricing</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Item</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Unit price $</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Qty</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Tax %</th>
+<th scope="col" style="padding: 10px 8px; font-weight: 600;">Discount</th>
+<th scope="col" style="padding: 10px 16px 10px 8px; font-weight: 600;">Included</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="4">
+<tr style="border-top: 1px solid #E4E4DE;">
+<td style="padding: 8px 8px 8px 16px;"><input type="text" value="{{l.order}}" aria-label="Line {{l.i}} order" style="width: 56px; min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 8px; font: inherit;"></td>
+<td style="padding: 8px;"><select aria-label="Line {{l.i}} kind" style="min-height: 44px; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 8px; font: inherit; background: #FFFFFF;"><option>Fixed fee</option><option>Hourly</option><option>Per unit</option><option>Remove</option></select></td>
+<td style="padding: 8px;"><input type="text" value="{{l.name}}" aria-label="Line {{l.i}} description" style="width: 100%; min-width: 200px; min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 8px; font: inherit;"></td>
+<td style="padding: 8px;"><input type="text" value="{{l.price}}" inputmode="decimal" aria-label="Line {{l.i}} unit price" style="width: 110px; min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 8px; font: inherit; text-align: right;"></td>
+<td style="padding: 8px;"><input type="text" value="{{l.qty}}" inputmode="decimal" aria-label="Line {{l.i}} quantity" style="width: 72px; min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 8px; font: inherit; text-align: right;"></td>
+<td style="padding: 8px;"><input type="text" value="{{l.tax}}" inputmode="decimal" aria-label="Line {{l.i}} tax rate" style="width: 64px; min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 8px; font: inherit; text-align: right;"></td>
+<td style="padding: 8px; white-space: nowrap;"><select aria-label="Line {{l.i}} discount type" style="min-height: 44px; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 6px; font: inherit; background: #FFFFFF;"><option>None</option><option>%</option><option>$</option></select> <input type="text" aria-label="Line {{l.i}} discount" style="width: 72px; min-height: 44px; box-sizing: border-box; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 8px; font: inherit;"></td>
+<td style="padding: 8px 16px 8px 8px;"><select aria-label="Line {{l.i}} included" style="min-height: 44px; border: 1px solid #8A8F99; border-radius: 8px; padding: 0 8px; font: inherit; background: #FFFFFF;"><option>Always</option><option>Optional, off</option><option>Optional, on</option></select></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center;">
+<button type="button" style="min-height: 44px; padding: 0 16px; border-radius: 10px; border: none; background: #0F5E63; color: #FFFFFF; font: inherit; font-weight: 600;">Save template</button>
+<details style="border: 1px solid #D9D9D2; border-radius: 10px; background: #FFFFFF; padding: 0 14px;">
+<summary style="min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; color: #8A1F11;">Delete this template…</summary>
+<div style="padding: 0 0 14px; display: flex; flex-direction: column; gap: 8px; max-width: 360px;"><span style="font-size: 14px; color: #3E434D;">Proposals made from it keep their copy.</span><button type="button" style="align-self: flex-start; min-height: 44px; padding: 0 16px; border-radius: 10px; border: none; background: #8A1F11; color: #FFFFFF; font: inherit; font-weight: 600;">Delete template</button></div>
+</details>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const sections = [
+      { legend: 'Section 1', order: '1', title: '[SECTION TITLE]', body: '[SECTION TEXT, MAY USE {{client}}]' },
+      { legend: 'Section 2', order: '2', title: '[TERMS TITLE]', body: '[YOUR TERMS]' },
+      { legend: 'New section (optional)', order: '', title: '', body: '' }
+    ];
+    const lines = [
+      { i: 1, order: '1', name: '[ITEM]', price: '[0.00]', qty: '1', tax: '0' },
+      { i: 2, order: '2', name: '[ITEM]', price: '[0.00]', qty: '[1.5]', tax: '[8.25]' },
+      { i: 3, order: '', name: '', price: '', qty: '1', tax: '0' }
+    ];
+    return { sections, lines, mfClient: '{{client}}', mfScope: '{{scope}}', mfTimeline: '{{timeline}}', mfAny: '{{…}}' };
+  }
+}
+</script>
+</body>
+</html>

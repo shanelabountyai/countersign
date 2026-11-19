@@ -34,8 +34,9 @@ test('template → proposal → draft save → supersede after send', async ({ p
   await page.getByLabel('Title').fill('Acme site');
   await page.getByLabel('Client').fill('Acme Co');
   await page.getByRole('button', { name: 'Create proposal' }).click();
-  await expect(page.getByRole('heading', { name: /Acme site v1 · draft/ })).toBeVisible();
-  await expect(page.getByRole('row', { name: /^Total/ })).toContainText('$2,706.25'); // 2500 + 8.25 % tax, rounded once (D-18)
+  await expect(page.getByRole('heading', { level: 1, name: 'Acme site' })).toBeVisible();
+  await expect(page.getByTestId('version-line')).toHaveText(/Version 1.*Draft/);
+  await expect(page.getByTestId('total')).toHaveText('$2,706.25'); // 2500 + 8.25 % tax, rounded once (D-18)
 
   await page.getByLabel('Scope', { exact: true }).fill('a new site');
   await page.getByRole('button', { name: 'Save draft' }).click();
@@ -53,6 +54,9 @@ test('template → proposal → draft save → supersede after send', async ({ p
   await page.getByLabel('Line 1 unit price').fill('3000');
   await page.getByRole('button', { name: 'Save as version 2' }).click();
   await expect(page.getByText('Saved as version 2.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: /Acme site v2 · draft/ })).toBeVisible();
-  await expect(page.getByRole('listitem').filter({ hasText: 'v1: superseded' })).toContainText(rows[0]!.pdfSha256);
+  await expect(page.getByRole('heading', { level: 1, name: 'Acme site' })).toBeVisible();
+  await expect(page.getByTestId('version-line')).toHaveText(/Version 2.*Draft/);
+  const v1 = page.getByRole('listitem').filter({ hasText: 'Version 1' });
+  await expect(v1).toContainText('Superseded');
+  await expect(v1).toContainText(rows[0]!.pdfSha256);
 });

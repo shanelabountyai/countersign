@@ -23,7 +23,8 @@ async function sendProposal(page: Page, title: string) {
   await page.getByLabel('Title').fill(title);
   await page.getByLabel('Client').fill('Globex');
   await page.getByRole('button', { name: 'Create proposal' }).click();
-  await expect(page.getByRole('heading', { name: new RegExp(`${title} v1 · draft`) })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+  await expect(page.getByTestId('version-line')).toHaveText(/Version 1.*Draft/);
   await page.getByLabel('Title', { exact: true }).nth(1).fill('Scope');
   await page.getByLabel('Text').first().fill('Brand refresh for {{client}}.');
   await page.getByLabel('Line 1 description').fill('Design');
@@ -53,8 +54,7 @@ test('signed PDF and certificate verify; one flipped byte and an unsigned PDF do
   await client.goto(path);
   await client.getByRole('button', { name: 'Open proposal' }).click();
   await client.getByLabel('Full name').fill('Hank Scorpio');
-  await client.getByLabel('Type your signature').fill('Hank Scorpio');
-  await client.getByRole('checkbox', { name: /I agree to do business electronically/ }).check();
+  await client.getByRole('checkbox', { name: /I agree to use electronic records and signatures/ }).check();
   await client.getByRole('button', { name: /^Sign for/ }).click();
   await expect(client.getByRole('heading', { name: 'Signed. Thank you.' })).toBeVisible();
   const pdf = Buffer.from(await (await client.request.get(`${path}/pdf`)).body());

@@ -1,80 +1,133 @@
 'use client';
-import { useMemo, useRef, useState, type PointerEvent } from 'react';
-import { displayCents, formatPercent, formatQuantity } from '@/lib/proposal/money';
-import type { Discount, LineKind } from '@/lib/proposal/pricing';
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { displayCents } from '@/lib/proposal/money';
+import type { Discount } from '@/lib/proposal/pricing';
 import { priceSelection } from '@/lib/proposal/selection';
 import { SIGNATURE_LIMITS } from '@/lib/proposal/signature-limits';
+import { Investment, type ClientLine } from './investment';
 
-type Line = { id: string; description: string; kind: LineKind; unitPriceCents: number; quantityMilli: number; taxRateBps: number; discount: Discount | null; optional: boolean; selected: boolean };
+// The client document and sign panel (D-32, D-37; docs/design/Main.dc.html, PhoneSign.dc.html, DeclineConfirm.dc.html).
+// Add-ons update the total live with the same price() the server uses; the server prices the posted choice again and
+// that is what is recorded. Typing a signature works without JavaScript; drawing needs it. Decline opens a confirmation
+// in place (a <details>, so it also works without JavaScript); nothing is recorded until it is confirmed.
+const FORM_ID = 'cs-sign';
 
-// The sign form (D-32, D-37). Add-ons update the total live with the same price() the server uses; the server prices the
-// posted choice again and that is what is recorded. Typing a signature works without JavaScript; drawing needs it.
-export function SignForm(p: { action: string; version: number; pdfSha256: string; discount: Discount | null; lines: Line[]; consent: string }) {
+export function SignForm(p: {
+  action: string;
+  declineAction: string;
+  version: number;
+  pdfSha256: string;
+  discount: Discount | null;
+  lines: ClientLine[];
+  /** The exact consent wording stored with the signature (D-37). */
+  consent: string;
+  orgName: string;
+  /** Document parts around the Investment block (server-rendered). */
+  before: ReactNode;
+  after: ReactNode;
+  expires: string;
+  error: string | null;
+  reasonMax: number;
+}) {
   const [chosen, setChosen] = useState(() => new Set(p.lines.filter((l) => l.optional && l.selected).map((l) => l.id)));
   const [method, setMethod] = useState<'typed' | 'drawn'>('typed');
+  const nameRef = useRef<HTMLInputElement>(null);
+  const typedRef = useRef<HTMLInputElement>(null);
+  const declineRef = useRef<HTMLDetailsElement>(null);
+  const summaryRef = useRef<HTMLElement>(null);
+  const alertRef = useRef<HTMLDivElement>(null);
+  const [drawnEmpty, setDrawnEmpty] = useState(false);
+  // A refused sign comes back as a fresh page load; an alert present at load is not announced, so focus it (A11Y-5).
+  useEffect(() => { if (p.error) alertRef.current?.focus(); }, [p.error]);
   const items = useMemo(() => p.lines.map((l) => ({ ...l, discount: l.discount ?? undefined })), [p.lines]);
   const priced = useMemo(() => priceSelection({ lines: items, ...(p.discount ? { discount: p.discount } : {}) }, [...chosen]), [items, p.discount, chosen]);
-  const byId = new Map(priced.lines.map((l) => [l.id, l]));
   const toggle = (id: string) => setChosen((s) => {
     const n = new Set(s);
     if (n.has(id)) n.delete(id);
     else n.add(id);
     return n;
   });
-  const qty = (l: Line) => (l.kind === 'fixed' ? '' : ` × ${formatQuantity(l.quantityMilli)}`);
+  const total = displayCents(priced.totalCents);
 
   return (
-    <form method="post" action={p.action}>
-      <input type="hidden" name="version" value={String(p.version)} />
-      <input type="hidden" name="pdfSha256" value={p.pdfSha256} />
-      <h2>Price</h2>
-      <table>
-        <thead><tr><th>Item</th><th>Amount</th><th>Discounts</th><th>Tax</th><th>Total</th></tr></thead>
-        <tbody>
-          {p.lines.map((l) => {
-            const r = byId.get(l.id)!;
-            return (
-              <tr key={l.id}>
-                <td>
-                  {l.optional ? (
-                    <label><input type="checkbox" name="addOn" value={l.id} checked={chosen.has(l.id)} onChange={() => toggle(l.id)} /> {l.description} (optional)</label>
-                  ) : l.description}
-                  <small> {displayCents(l.unitPriceCents)}{qty(l)}</small>
-                </td>
-                <td>{r.included ? displayCents(r.extendedCents) : '—'}</td>
-                <td>{r.included ? displayCents(r.lineDiscountCents + r.allocatedDiscountCents) : '—'}</td>
-                <td>{r.included ? displayCents(r.taxCents) : '—'}</td>
-                <td>{r.included ? displayCents(r.totalCents) : '—'}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr><th>Subtotal</th><td colSpan={3} /><td>{displayCents(priced.subtotalCents)}</td></tr>
-          {priced.proposalDiscountCents > 0 && <tr><th>Proposal discount</th><td colSpan={3} /><td>−{displayCents(priced.proposalDiscountCents)}</td></tr>}
-          {priced.taxes.map((t) => <tr key={t.taxRateBps}><th>Tax {formatPercent(t.taxRateBps)} % on {displayCents(t.taxableCents)}</th><td colSpan={3} /><td>{displayCents(t.taxCents)}</td></tr>)}
-          <tr><th>Total</th><td colSpan={3} /><td><strong data-testid="total">{displayCents(priced.totalCents)}</strong></td></tr>
-        </tfoot>
-      </table>
+    <>
+      <article className="cs-doc">
+        {p.before}
+        <Investment lines={p.lines} priced={priced} chosen={chosen} onToggle={toggle} form={FORM_ID} />
+        {p.after}
+      </article>
 
-      <h2>Sign</h2>
-      <label>Full name <input name="signerName" required maxLength={SIGNATURE_LIMITS.name} autoComplete="name" /></label>
-      <fieldset>
-        <legend>Signature</legend>
-        <label><input type="radio" name="method" value="typed" checked={method === 'typed'} onChange={() => setMethod('typed')} /> Type</label>{' '}
-        <label><input type="radio" name="method" value="drawn" checked={method === 'drawn'} onChange={() => setMethod('drawn')} /> Draw</label>
-        <br />
-        {method === 'typed' ? (
-          <label>Type your signature <input name="typed" required maxLength={SIGNATURE_LIMITS.name} style={{ fontStyle: 'italic', fontSize: '1.4em' }} /></label>
-        ) : (
-          <SignaturePad />
-        )}
-      </fieldset>
-      <p>
-        <label><input type="checkbox" name="consent" value="yes" required /> {p.consent}</label>
-      </p>
-      <button type="submit">Sign for {displayCents(priced.totalCents)}</button>
-    </form>
+      <section aria-labelledby="cs-sign-h" className="cs-panel">
+        <h2 id="cs-sign-h">Sign this proposal</h2>
+        {(p.error || drawnEmpty) && <div role="alert" className="cs-alert" tabIndex={-1} ref={alertRef}><span aria-hidden="true">✗</span><p>{drawnEmpty ? 'Draw your signature in the box, or type it instead.' : p.error}</p></div>}
+        <form id={FORM_ID} method="post" action={p.action} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}
+          onSubmit={(e) => {
+            if (typedRef.current && nameRef.current) typedRef.current.value = nameRef.current.value;
+            const drawn = e.currentTarget.elements.namedItem('drawn');
+            if (method === 'drawn' && drawn instanceof HTMLInputElement && !drawn.value) { // checked here so nothing on the page is lost (UX-4)
+              e.preventDefault();
+              setDrawnEmpty(true);
+              requestAnimationFrame(() => alertRef.current?.focus());
+            }
+          }}>
+          <input type="hidden" name="version" value={String(p.version)} />
+          <input type="hidden" name="pdfSha256" value={p.pdfSha256} />
+          <input type="hidden" name="method" value={method} />
+          <div className="cs-consent">
+            <label className="cs-check">
+              <input type="checkbox" name="consent" value="yes" required aria-describedby="cs-consent-full" />
+              <span>I agree to use electronic records and signatures for this proposal, and I can ask for a paper copy.</span>
+            </label>
+            <details>
+              <summary>Read the exact consent wording</summary>
+              <blockquote id="cs-consent-full">{p.consent}</blockquote>
+            </details>
+          </div>
+          <div className="cs-signrow">
+            <div className="cs-namefield">
+              <label htmlFor="cs-name">{method === 'typed' ? 'Type your full name to sign' : 'Your full name'}</label>
+              {/* Without JavaScript this field is copied into nothing, so a separate typed-signature field is offered. */}
+              <noscript><input name="typed" aria-label="Type your signature" className="cs-sig" maxLength={SIGNATURE_LIMITS.name} required /></noscript>
+              <input id="cs-name" name="signerName" required maxLength={SIGNATURE_LIMITS.name} autoComplete="name" ref={nameRef}
+                className={method === 'typed' ? 'cs-sig' : 'cs-input'} style={method === 'typed' ? undefined : { minHeight: 52, fontSize: 18 }} />
+              {/* The typed signature is the name as submitted (D-55): copied at submit, so text typed before hydration counts. */}
+              {method === 'typed' && <input type="hidden" name="typed" ref={typedRef} defaultValue="" />}
+              {method === 'typed' ? (
+                <span className="cs-hint">Your typed name is your signature. Or <button type="button" className="cs-linkbtn" onClick={() => setMethod('drawn')}>draw your signature instead</button></span>
+              ) : (
+                <span className="cs-hint">Draw below. Or <button type="button" className="cs-linkbtn" onClick={() => { setMethod('typed'); setDrawnEmpty(false); }}>type your signature instead</button></span>
+              )}
+            </div>
+          </div>
+          {method === 'drawn' && <SignaturePad />}
+        </form>
+        <span className="cs-vh" aria-live="polite">Total {total}</span>
+        <div className="cs-btnrow">
+          <button type="submit" form={FORM_ID} className="cs-btn cs-btn--primary cs-btn--lg">Sign for {total}</button>
+          <details className="cs-decline" ref={declineRef}>
+            <summary className="cs-btn cs-btn--lg" ref={summaryRef}>Decline</summary>
+            <div role="group" aria-labelledby="cs-decline-h" className="cs-confirm">
+              <h3 id="cs-decline-h"><span aria-hidden="true" style={{ color: 'var(--cs-red-ink)' }}>✗</span>Decline this proposal?</h3>
+              <p>Declining is final for this version: the link stops working and nothing can be signed on it. {p.orgName} can send you a new version.</p>
+              <form method="post" action={p.declineAction} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <input type="hidden" name="version" value={String(p.version)} />
+                <input type="hidden" name="pdfSha256" value={p.pdfSha256} />
+                <label className="cs-label" style={{ fontSize: 15 }}>
+                  Reason for {p.orgName} (optional)
+                  <textarea name="reason" rows={3} maxLength={p.reasonMax} className="cs-input" aria-describedby="cs-reason-hint" />
+                </label>
+                <span id="cs-reason-hint" className="cs-hint">Up to {p.reasonMax.toLocaleString('en-US')} characters. Kept in the proposal&apos;s audit trail.</span>
+                <div className="cs-actions">
+                  <button type="submit" className="cs-btn cs-btn--danger">Decline this proposal</button>
+                  <button type="button" className="cs-btn" onClick={() => { if (declineRef.current) declineRef.current.open = false; summaryRef.current?.focus(); }}>Keep reviewing</button>
+                </div>
+              </form>
+            </div>
+          </details>
+        </div>
+        <p className="cs-foot">Signing records the time, a hashed IP address and your browser, and locks this exact version. The link is valid until {p.expires}. This is a demo, not a legally vetted e-signature product.</p>
+      </section>
+    </>
   );
 }
 
@@ -98,6 +151,7 @@ function SignaturePad() {
     c.clearRect(0, 0, W, H);
     c.lineWidth = 3;
     c.lineCap = 'round';
+    c.strokeStyle = '#16181D';
     c.beginPath();
     for (const s of strokes.current) s.forEach((pt, i) => (i ? c.lineTo(pt.x, pt.y) : c.moveTo(pt.x, pt.y)));
     c.stroke();
@@ -128,13 +182,14 @@ function SignaturePad() {
     setPath('');
   };
   return (
-    <div>
-      <canvas ref={ref} width={W} height={H} aria-label="Draw your signature" data-testid="signature-pad"
-        style={{ border: '1px solid #888', width: '100%', maxWidth: W, aspectRatio: `${W} / ${H}`, touchAction: 'none' }}
+    <div className="cs-pad">
+      <canvas ref={ref} width={W} height={H} role="img" aria-label="Signature drawing area. Draw with a mouse, finger or pen; or type your signature instead." data-testid="signature-pad"
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
       <input type="hidden" name="drawn" value={path} />
-      <br />
-      <button type="button" onClick={clear}>Clear</button>
+      <div className="cs-actions">
+        <button type="button" className="cs-btn cs-btn--sm" onClick={clear}>Clear drawing</button>
+        <span className="cs-hint" aria-live="polite">{path ? 'Signature drawn.' : 'Nothing drawn yet.'}</span>
+      </div>
     </div>
   );
 }

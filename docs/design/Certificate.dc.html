@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Signed, with completion certificate</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&amp;family=Space+Grotesk:wght@600;700&amp;display=swap">
+<style>
+body{margin:0;background:#EFEFEA}
+a{color:#0F5E63}a:hover{color:#0A4347}
+</style>
+</helmet>
+<div style="min-height: 100%; background: #EFEFEA; color: #16181D; font-family: Inter, system-ui, sans-serif; font-size: 16px; line-height: 1.5;">
+<main style="max-width: 880px; margin: 0 auto; padding: 40px 24px 64px; display: flex; flex-direction: column; gap: 24px;">
+<section role="status" style="background: #E6EEF9; color: #163F75; border-radius: 12px; padding: 20px 24px; display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between;">
+<div style="display: flex; gap: 12px; align-items: center;">
+<span aria-hidden="true" style="width: 36px; height: 36px; border-radius: 50%; background: #1D4F91; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700;">✓</span>
+<div style="display: flex; flex-direction: column;">
+<span style="font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700;">Signed</span>
+<span style="font-size: 15px;">You signed version 2 on Nov 17, 2026 at 10:52 AM CT. Lab Intelligence has been told.</span>
+</div>
+</div>
+<div style="display: flex; gap: 10px; flex-wrap: wrap;">
+<a href="#cert" style="min-height: 48px; box-sizing: border-box; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 10px; background: #1D4F91; color: #FFFFFF; text-decoration: none; font-weight: 600;">Download signed PDF</a>
+<a href="#cert" style="min-height: 48px; box-sizing: border-box; display: inline-flex; align-items: center; padding: 0 16px; border-radius: 10px; border: 1px solid #1D4F91; color: #163F75; text-decoration: none; font-weight: 600; background: #FFFFFF;">Certificate PDF</a>
+</div>
+</section>
+
+<article id="cert" style="background: #FFFFFF; border: 1px solid #D9D9D2; border-radius: 6px; padding: 48px 56px; display: flex; flex-direction: column; gap: 24px;">
+<header style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-bottom: 2px solid #16181D; padding-bottom: 16px;">
+<h1 style="margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 30px; font-weight: 600;">Certificate of completion</h1>
+<span style="font-size: 14px; color: #565B66; align-self: flex-end;">Proposal LI-2026-014 · Version 2</span>
+</header>
+<dl style="margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 32px; font-size: 15px;">
+<div><dt style="color: #565B66; font-size: 13px; font-weight: 600;">Document</dt><dd style="margin: 0;">AI Use-Case Discovery and Evaluation</dd></div>
+<div><dt style="color: #565B66; font-size: 13px; font-weight: 600;">Sender</dt><dd style="margin: 0;">Lab Intelligence (org name as it stood at signing)</dd></div>
+<div><dt style="color: #565B66; font-size: 13px; font-weight: 600;">Signer</dt><dd style="margin: 0;">Jordan Avery · typed signature</dd></div>
+<div><dt style="color: #565B66; font-size: 13px; font-weight: 600;">Total agreed</dt><dd style="margin: 0;">$11,985.90 (includes the readout deck add-on)</dd></div>
+<div style="grid-column: 1 / -1;"><dt style="color: #565B66; font-size: 13px; font-weight: 600;">Document fingerprint (SHA-256 of the signed PDF)</dt><dd style="margin: 0; font-family: ui-monospace, Menlo, monospace; font-size: 13px; overflow-wrap: anywhere; background: #F0F0EB; border-radius: 6px; padding: 8px 10px;">[SHA-256 OF THE SIGNED PDF, 64 HEX CHARACTERS]</dd></div>
+<div style="grid-column: 1 / -1;"><dt style="color: #565B66; font-size: 13px; font-weight: 600;">PDF renderer</dt><dd style="margin: 0;">@react-pdf/renderer [PINNED VERSION], stored with this version</dd></div>
+</dl>
+<section aria-labelledby="ev" style="display: flex; flex-direction: column; gap: 10px;">
+<h2 id="ev" style="margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 20px; font-weight: 600;">Event log</h2>
+<div style="overflow-x: auto; border: 1px solid #E4E4DE; border-radius: 8px;">
+<table style="width: 100%; min-width: 640px; border-collapse: collapse; font-size: 14px;">
+<thead><tr style="background: #F0F0EB; text-align: left;">
+<th scope="col" style="padding: 10px 12px; font-weight: 600;">Time (CT)</th>
+<th scope="col" style="padding: 10px 12px; font-weight: 600;">Event</th>
+<th scope="col" style="padding: 10px 12px; font-weight: 600;">Hashed IP</th>
+<th scope="col" style="padding: 10px 12px; font-weight: 600;">Browser</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{events}}" as="e" hint-placeholder-count="5">
+<tr style="border-top: 1px solid #E4E4DE;">
+<td style="padding: 10px 12px; white-space: nowrap;">{{e.t}}</td>
+<td style="padding: 10px 12px; font-weight: 500;">{{e.what}}</td>
+<td style="padding: 10px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: #3E434D;">{{e.ip}}</td>
+<td style="padding: 10px 12px; color: #3E434D;">{{e.ua}}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</section>
+<p style="margin: 0; font-size: 14px; color: #565B66;">Anyone can check that a PDF matches this signed version at <a href="#cert">countersign.example/verify</a>: any changed byte will not match. This is a demo, not a legally vetted e-signature product.</p>
+</article>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1160}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const events = [
+      { t: 'Nov 17, 10:12 AM', what: 'Version 2 sent to Jordan Avery', ip: '—', ua: 'Sender' },
+      { t: 'Nov 17, 10:40 AM', what: 'Opened', ip: '[HASH]', ua: 'Safari, iOS' },
+      { t: 'Nov 17, 10:49 AM', what: 'Added: Executive readout deck', ip: '[HASH]', ua: 'Safari, iOS' },
+      { t: 'Nov 17, 10:51 AM', what: 'Agreed to electronic records', ip: '[HASH]', ua: 'Safari, iOS' },
+      { t: 'Nov 17, 10:52 AM', what: 'Signed (typed)', ip: '[HASH]', ua: 'Safari, iOS' }
+    ];
+    return { events };
+  }
+}
+</script>
+</body>
+</html>
