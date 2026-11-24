@@ -1,5 +1,33 @@
 # NEXT
 
+## ▶ 2026-11-24: Countersign pre-live portfolio pack, draft PR open (branch `portfolio-pack/2026-11-24`), docs only, **Not deployed**
+Scheduled routine, unattended. Branch cut from `main` at `c63360b`; no code, test, schema, config or CI change. The
+2026-11-23 attempt left only the brief (no branch, no PR); this pack starts its rows at D-72, the next on `main`.
+
+**Done:** `docs/DEMO.md` (17 stops, At a glance block); `docs/LINKEDIN_DRAFTS.md` (2 drafts on D-40 and D-32, drafted,
+unposted); `docs/RELEASE_NOTES.md` ("Not deployed — portfolio pack 2026-11-24", PRs #1–#11 checked on `main`); cost note
+D-75; exec brief "Countersign in Brief" updated in place, not shared (https://claude.ai/artifact/9SoeELLhUFENLMwiSqNyer,
+D-76); DECISIONS D-72 to D-76.
+
+**Verified, and how** (D-73, local stand-ins for the Prisma engine and Postgres): `npm run lint` 0, `npm run typecheck` 0,
+`npm test` 812 passed / 31 skipped in 63 files, `npm run build:test` 0, `npm run test:e2e` 23 of 23 (matches
+`playwright test --list`). Every merge commit in the release notes is an ancestor of `origin/main`. GitHub CI on the PR:
+see the PR's "Gate results".
+
+**Not verified:** `npm ci` (exit 1 here: postinstall cannot fetch Prisma's schema engine) and `npm run db:setup` as
+written; bare `npm run build` (exit 1: no `.env.local`); any stop of DEMO.md by hand; stops 2, 8 and 16 are only partly
+covered by tests; the 2026-11-23 brief's report of a flaky template-editor title check (one green run today does not rule
+it out); any cost (none recorded).
+
+**Code changes a doc fix would need:** none found.
+
+**You:**
+1. Review the draft PR (held: do not merge until you have).
+2. Click through `docs/DEMO.md` on your laptop and strike "not yet clicked through" where it holds.
+3. Read the brief (link above) and correct anything that reads wrong to a hiring lead.
+4. Edit the two LinkedIn drafts into your voice; neither is posted.
+5. Decide whether to deploy. If yes: hosting, a database, a real `APP_URL` for links, and a running-cost measurement first.
+
 ## ▶ 2026-11-19: design follow-ups PR open (branch `design/followups`), Shane's picks after the design pass merged (#10)
 Owner rulings recorded (D-66): D-54 kept as built; D-48 → real logo + colour. Built: `OrgBrand` table + Settings → Brand
 (accent checked for contrast, PNG/JPEG logo ≤ 100 KB) on every client page (D-66); stale sign/decline POST → 303 to the
