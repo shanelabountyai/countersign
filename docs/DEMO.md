@@ -11,7 +11,7 @@ Written 2026-11-24 for the portfolio pack (branch `portfolio-pack/2026-11-24`, f
 
 | | |
 |---|---|
-| **Who it is for** | A small services business that sends quotes, and the client who signs them (PRD "Why"). Lab Intelligence is named as a possible first user. |
+| **Who it is for** | A services business that sends quotes, and the client who signs them (PRD "Why"). Lab Intelligence is named as a possible first user. |
 | **What was decided** | Signing is mocked, the audit trail is real (D-01). Money is integer cents (D-03), tax rounded once per rate (D-18, Shane's call). A sent or signed version, its lines and its PDF are frozen by database triggers (D-21, D-35). An add-on the client picks is recorded with the signature, so the signed PDF never changes (D-32). `/verify` re-derives the record rather than trusting a stored hash (D-40). |
 | **What was left out** | A real e-sign provider, payments and deposits, email to the client, any legal review (PRD "Out of scope", D-01). Artboard details with nothing behind them (D-56). Dark mode (D-51). |
 | **The complete journey** | Template → proposal → send (copy the one-time link) → client opens, picks add-ons, signs or declines → both sides get the certificate → anyone holding the PDF checks it on `/verify`. |
@@ -63,7 +63,7 @@ Not run as written on 2026-11-24: this sandbox cannot download Prisma's schema e
    wording sits behind "Read the exact consent wording" (D-54, kept by Shane, D-66). Typed verified by the signing test
    above; drawn by `e2e/signing.spec.ts` › "a drawn signature; an edit after send makes the old link HTTP 410".
 10. **Signed page and certificate.** Banner and certificate first, then the signed proposal (D-59). The downloaded PDF and
-    certificate hash to the recorded values; the hash shows on the certificate only (DUX-03). Verified by the first
+    certificate hash to the recorded values; the hash shows on the certificate (and on `/verify`), not on the signing pages (DUX-03). Verified by the first
     signing test and `e2e/design.spec.ts` › "the hash is on the certificate only; signing pages and the editor pass axe;
     phone layout fits 390 px".
 11. **Decline instead.** On a second proposal: "Decline", give a reason, confirm. Nothing is recorded until confirmed

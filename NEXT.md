@@ -1,5 +1,11 @@
 # NEXT
 
+## ▶ 2026-11-26: independent review of PR #12, four factual fixes (D-77), still a draft, **Not deployed**
+Unattended run. Verdict: merge after must-fixes, now fixed on `portfolio-pack/2026-11-24`: DEMO "who it is for" wording
+(PRD says "every services business"), DEMO stop 10's hash placement (DUX-03), "not deployed" in LinkedIn draft 2, and the
+exec brief marked "not verified" (outside the repo). Every other claim checked out (D-77 lists how). **You:** read the
+review on #12; open the brief and strike "not verified" if it holds; edit the drafts in your own voice.
+
 ## ▶ 2026-11-24: Countersign pre-live portfolio pack, draft PR open (branch `portfolio-pack/2026-11-24`), docs only, **Not deployed**
 Scheduled routine, unattended. Branch cut from `main` at `c63360b`; no code, test, schema, config or CI change. The
 2026-11-23 attempt left only the brief (no branch, no PR); this pack starts its rows at D-72, the next on `main`.
@@ -7,7 +13,7 @@ Scheduled routine, unattended. Branch cut from `main` at `c63360b`; no code, tes
 **Done:** `docs/DEMO.md` (17 stops, At a glance block); `docs/LINKEDIN_DRAFTS.md` (2 drafts on D-40 and D-32, drafted,
 unposted); `docs/RELEASE_NOTES.md` ("Not deployed — portfolio pack 2026-11-24", PRs #1–#11 checked on `main`); cost note
 D-75; exec brief "Countersign in Brief" updated in place, not shared (https://claude.ai/artifact/9SoeELLhUFENLMwiSqNyer,
-D-76); DECISIONS D-72 to D-76.
+D-76; **not verified** by the 2026-11-26 review, D-77); DECISIONS D-72 to D-76.
 
 **Verified, and how** (D-73, local stand-ins for the Prisma engine and Postgres): `npm run lint` 0, `npm run typecheck` 0,
 `npm test` 812 passed / 31 skipped in 63 files, `npm run build:test` 0, `npm run test:e2e` 23 of 23 (matches

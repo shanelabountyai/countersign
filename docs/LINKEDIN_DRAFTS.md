@@ -41,7 +41,7 @@ into a new version), with D-21 (a sent version is frozen in the database).
 
 > Proposals usually have optional extras. The client ticks "add the training day" and the total changes.
 >
-> Building Countersign, a sample proposal-and-e-sign app on synthetic data, that small feature ran straight into a rule I had already set: once a proposal is sent, its PDF and its lines are frozen. The database refuses the change.
+> Building Countersign, a sample proposal-and-e-sign app on synthetic data, not deployed, that small feature ran straight into a rule I had already set: once a proposal is sent, its PDF and its lines are frozen. The database refuses the change.
 >
 > Two ways out. Make every tick create a new version with a new PDF. Or leave the document alone and record the choice with the signature.
 >

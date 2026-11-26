@@ -37,7 +37,7 @@ exits 1 without `.env.local`; GitHub CI on the pack's pull request is the real g
 |---|---|---|
 | Gate run | `docs/countersign/DECISIONS.md` D-72, D-73; PR description | Done, local stand-ins; CI on the PR |
 | Demo walk-through | [`docs/DEMO.md`](DEMO.md) | 17 stops: 14 covered by a passing test, 3 partly; none clicked through by Shane (D-74) |
-| Exec brief "Countersign in Brief" | [Claude Docs, private](https://claude.ai/artifact/9SoeELLhUFENLMwiSqNyer) | Updated in place from the 2026-11-23 draft (D-76); not shared |
+| Exec brief "Countersign in Brief" | [Claude Docs, private](https://claude.ai/artifact/9SoeELLhUFENLMwiSqNyer) | Updated in place from the 2026-11-23 draft (D-76); not shared. **Not verified** by the 2026-11-26 review (it is outside the repo; D-77) |
 | LinkedIn drafts | [`docs/LINKEDIN_DRAFTS.md`](LINKEDIN_DRAFTS.md) | 2 drafts, on D-40 and D-32; drafted, unposted |
 | Cost note | `docs/countersign/DECISIONS.md` D-75 | Build cost and running cost not measured; the $1.00/month demo AI cap is a limit, not a result |
 | Release notes | this file | This entry |
